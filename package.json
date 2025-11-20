@@ -1,6 +1,5 @@
 {
-  "name": "nuxt-ui-template-dashboard",
-  "private": true,
+  "name": "crm-dashboard",
   "type": "module",
   "scripts": {
     "build": "nuxt build",
