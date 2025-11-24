@@ -3,8 +3,20 @@ export default defineNuxtConfig({
   modules: [
     '@nuxt/eslint',
     '@nuxt/ui',
-    '@vueuse/nuxt'
+    '@vueuse/nuxt',
+    '@nuxtjs/supabase'
   ],
+
+  supabase: {
+    redirect: false,
+    serviceKey: process.env.SUPABASE_SERVICE_ROLE
+  },
+
+  runtimeConfig: {
+    supabase: {
+      serviceKey: process.env.SUPABASE_SERVICE_ROLE
+    }
+  },
 
   devtools: {
     enabled: true

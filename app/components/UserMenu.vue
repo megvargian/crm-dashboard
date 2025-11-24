@@ -11,15 +11,44 @@ const appConfig = useAppConfig()
 const colors = ['red', 'orange', 'amber', 'yellow', 'lime', 'green', 'emerald', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose']
 const neutrals = ['slate', 'gray', 'zinc', 'neutral', 'stone']
 
-const user = ref({
-  name: 'Benjamin Canac',
-  avatar: {
-    src: 'https://github.com/benjamincanac.png',
-    alt: 'Benjamin Canac'
+const supabaseUser = useSupabaseUser()
+const supabase = useSupabaseClient()
+
+const clientProfile = ref<any>(null)
+
+// Fetch client profile from database
+watchEffect(async () => {
+  if (supabaseUser.value?.id) {
+    const { data } = await supabase
+      .from('client_profile')
+      .select('first_name, last_name, profile_picture')
+      .eq('id', supabaseUser.value.id)
+      .single()
+
+    clientProfile.value = data
   }
 })
 
-const items = computed<DropdownMenuItem[][]>(() => ([[{
+const user = computed(() => {
+  // Try client_profile first, then fall back to user_metadata
+  const firstName = clientProfile.value?.first_name || supabaseUser.value?.user_metadata?.first_name || ''
+  const lastName = clientProfile.value?.last_name || supabaseUser.value?.user_metadata?.last_name || ''
+  const fullName = `${firstName} ${lastName}`.trim() || supabaseUser.value?.email || 'User'
+  const initials = firstName && lastName
+    ? `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase()
+    : (supabaseUser.value?.email?.charAt(0) || 'U').toUpperCase()
+
+  return {
+    name: fullName,
+    avatar: {
+      src: clientProfile.value?.profile_picture,
+      alt: fullName,
+      text: initials
+    }
+  }
+})
+
+const items = computed<DropdownMenuItem[][]>(() => [[{
   type: 'label',
   label: user.value.name,
   avatar: user.value.avatar
@@ -147,8 +176,12 @@ const items = computed<DropdownMenuItem[][]>(() => ([[{
   target: '_blank'
 }, {
   label: 'Log out',
-  icon: 'i-lucide-log-out'
-}]]))
+  icon: 'i-lucide-log-out',
+  onSelect: async () => {
+    await supabase.auth.signOut()
+    await navigateTo('/login')
+  }
+}]])
 </script>
 
 <template>
