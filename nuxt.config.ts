@@ -4,25 +4,21 @@ export default defineNuxtConfig({
     '@nuxt/eslint',
     '@nuxt/ui',
     '@vueuse/nuxt',
-    '@nuxtjs/supabase'
+    '@nuxtjs/supabase',
+    '@pinia/nuxt'
   ],
-
-  supabase: {
-    redirect: false,
-    serviceKey: process.env.SUPABASE_SERVICE_ROLE
-  },
-
-  runtimeConfig: {
-    supabase: {
-      serviceKey: process.env.SUPABASE_SERVICE_ROLE
-    }
-  },
 
   devtools: {
     enabled: true
   },
 
   css: ['~/assets/css/main.css'],
+
+  runtimeConfig: {
+    supabase: {
+      serviceKey: process.env.SUPABASE_SERVICE_ROLE
+    }
+  },
 
   routeRules: {
     '/api/**': {
@@ -39,5 +35,10 @@ export default defineNuxtConfig({
         braceStyle: '1tbs'
       }
     }
+  },
+
+  supabase: {
+    redirect: false,
+    serviceKey: process.env.SUPABASE_SERVICE_ROLE
   }
 })
