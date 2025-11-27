@@ -15,9 +15,9 @@ const profileSchema = z.object({
   profile_picture: z.string().optional()
 })
 
-type ProfileSchema = z.output<typeof profileSchema>
+// type ProfileSchema = z.output<typeof profileSchema>
 
-const profile = reactive<{ first_name: string; last_name: string; address: string; profile_picture: string | undefined }>({
+const profile = reactive<{ first_name: string, last_name: string, address: string, profile_picture: string | undefined }>({
   first_name: '',
   last_name: '',
   address: '',
@@ -26,7 +26,7 @@ const profile = reactive<{ first_name: string; last_name: string; address: strin
 
 const loading = ref(false)
 const uploading = ref(false)
-const originalProfile = ref<{ first_name: string; last_name: string; address: string; profile_picture: string | undefined }>({
+const originalProfile = ref<{ first_name: string, last_name: string, address: string, profile_picture: string | undefined }>({
   first_name: '',
   last_name: '',
   address: '',
@@ -47,7 +47,7 @@ onMounted(async () => {
   const { data } = await supabase
     .from('client_profile')
     .select('first_name, last_name, address, profile_picture')
-    .eq('id', user.id)
+    .eq('user_id', user.id)
     .single<ClientProfile>()
 
   if (data) {
@@ -91,7 +91,7 @@ async function onSubmit(event?: Event) {
         last_name: profile.last_name,
         address: profile.address
       } as never)
-      .eq('id', user.id)
+      .eq('user_id', user.id)
 
     if (error) throw error
 
@@ -119,66 +119,65 @@ async function onSubmit(event?: Event) {
   }
 }
 
-// // async function onFileChange(e: Event) {
-// //   const input = e.target as HTMLInputElement
-// //   if (!input.files?.length || !user.value?.id) return
+async function onFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (!input.files?.length || !user?.id) return
 
-// //   const file = input.files[0]
-// //   uploading.value = true
+  const file = input.files[0]
+  if (!file) return
+  uploading.value = true
 
-// //   try {
-// //     // Create unique filename
-// //     const fileExt = file.name.split('.').pop()
-// //     const fileName = `${user.value.id}-${Date.now()}.${fileExt}`
-// //     const filePath = `avatars/${fileName}`
+  try {
+    // Create unique filename
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${user.id}-${Date.now()}.${fileExt}`
+    const filePath = `avatars/${fileName}`
+    // Upload to Supabase storage
+    const { error: uploadError } = await supabase.storage
+      .from('profile_picture')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: true
+      })
+    if (uploadError) throw uploadError
 
-// //     // Upload to Supabase storage
-// //     const { error: uploadError } = await supabase.storage
-// //       .from('profile_picture')
-// //       .upload(filePath, file, {
-// //         cacheControl: '3600',
-// //         upsert: true
-// //       })
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('profile_picture')
+      .getPublicUrl(filePath)
 
-// //     if (uploadError) throw uploadError
+    // Update profile with new URL
+    const { error: updateError } = await supabase
+      .from('client_profile')
+      .update({ profile_picture: publicUrl as string } as never)
+      .eq('user_id', user.id)
 
-// //     // Get public URL
-// //     const { data: { publicUrl } } = supabase.storage
-// //       .from('profile_picture')
-// //       .getPublicUrl(filePath)
+    if (updateError) throw updateError
 
-// //     // Update profile with new URL
-// //     const { error: updateError } = await supabase
-// //       .from('client_profile')
-// //       .update({ profile_picture: publicUrl } as any)
-// //       .eq('id', user.value.id)
+    profile.profile_picture = publicUrl
+    originalProfile.value.profile_picture = publicUrl
 
-// //     if (updateError) throw updateError
+    toast.add({
+      title: 'Success',
+      description: 'Profile picture updated.',
+      icon: 'i-lucide-check',
+      color: 'success'
+    })
+  } catch (error) {
+    toast.add({
+      title: 'Error',
+      description: typeof error === 'object' && error !== null && 'message' in error ? (error as { message: string }).message : 'Failed to upload image.',
+      icon: 'i-lucide-x',
+      color: 'error'
+    })
+  } finally {
+    uploading.value = false
+  }
+}
 
-// //     profile.profile_picture = publicUrl
-// //     originalProfile.value.profile_picture = publicUrl
-
-// //     toast.add({
-// //       title: 'Success',
-// //       description: 'Profile picture updated.',
-// //       icon: 'i-lucide-check',
-// //       color: 'success'
-//     // })
-//   // } catch (error) {
-//   //   toast.add({
-//   //     title: 'Error',
-//   //     description: (error as any).message || 'Failed to upload image.',
-//   //     icon: 'i-lucide-x',
-//   //     color: 'error'
-//   //   })
-//   // } finally {
-//   //   uploading.value = false
-//   // }
-// }
-
-// function onFileClick() {
-//   fileRef.value?.click()
-// }
+function onFileClick() {
+  fileRef.value?.click()
+}
 </script>
 
 <template>
@@ -232,7 +231,7 @@ async function onSubmit(event?: Event) {
           autocomplete="off"
         />
       </UFormField>
-      <!-- <USeparator />
+      <USeparator />
       <UFormField
         name="profile_picture"
         label="Profile Picture"
@@ -260,7 +259,7 @@ async function onSubmit(event?: Event) {
             @change="onFileChange"
           >
         </div>
-      </UFormField> -->
+      </UFormField>
     </UPageCard>
   </UForm>
   <UButton
