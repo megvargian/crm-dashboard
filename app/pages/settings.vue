@@ -1,15 +1,24 @@
 <script setup lang="ts">
 import type { NavigationMenuItem } from '@nuxt/ui'
+import { useUserStore } from '~/stores/user'
 
-const links = [[{
+const userStore = useUserStore()
+
+// Watch for profile changes
+watch(() => userStore.clientProfile, (newProfile) => {
+  console.log('Profile changed:', newProfile)
+}, { immediate: true })
+
+// Filter navigation based on user role
+const allLinks = [[{
   label: 'General',
   icon: 'i-lucide-user',
   to: '/settings',
   exact: true
 }, {
-  label: 'Members',
+  label: 'Employees',
   icon: 'i-lucide-users',
-  to: '/settings/members'
+  to: '/settings/employees'
 }, {
   label: 'Notifications',
   icon: 'i-lucide-bell',
@@ -23,7 +32,27 @@ const links = [[{
   icon: 'i-lucide-book-open',
   to: 'https://ui.nuxt.com/docs/getting-started/installation/nuxt',
   target: '_blank'
-}]] satisfies NavigationMenuItem[][]
+}]]
+
+// Remove Employees tab if user is not admin
+const links = computed(() => {
+  console.log('Computing links...')
+  console.log('User profile:', userStore.clientProfile)
+  console.log('User role:', userStore.clientProfile?.role)
+
+  const filteredLinks = allLinks.map(group =>
+    group.filter((link) => {
+      if (link.label === 'Employees') {
+        const isAdmin = userStore.clientProfile?.role === 'admin'
+        console.log('Employee tab check - isAdmin:', isAdmin)
+        return isAdmin
+      }
+      return true
+    })
+  )
+  console.log('Final filtered links:', filteredLinks)
+  return filteredLinks
+}) satisfies ComputedRef<NavigationMenuItem[][]>
 </script>
 
 <template>

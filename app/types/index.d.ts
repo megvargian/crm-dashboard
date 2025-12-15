@@ -28,6 +28,20 @@ export interface Member {
   avatar: AvatarProps
 }
 
+export interface Employee {
+  id: string
+  created_at: string
+  full_name: string
+  role: string
+  email: string
+  phone_number?: string
+  service_types?: string
+  is_active: boolean
+  start_working_hour?: string
+  end_working_hours?: string
+  working_week_days?: string
+}
+
 export interface Stat {
   title: string
   icon: string

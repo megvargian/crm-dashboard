@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { DropdownMenuItem } from '@nuxt/ui'
+import type { ClientProfile } from '~/types/client_profile'
+import { useUserStore } from '~/stores/user'
 
 defineProps<{
   collapsed?: boolean
@@ -14,7 +16,7 @@ const neutrals = ['slate', 'gray', 'zinc', 'neutral', 'stone']
 const supabaseUser = useSupabaseUser()
 const supabase = useSupabaseClient()
 
-const clientProfile = ref<any>(null)
+const clientProfile = ref<ClientProfile | null>(null)
 
 // Fetch client profile from database
 watchEffect(async () => {
@@ -131,8 +133,33 @@ const items = computed<DropdownMenuItem[][]>(() => [[{
   label: 'Log out',
   icon: 'i-lucide-log-out',
   onSelect: async () => {
-    await supabase.auth.signOut()
-    await navigateTo('/login')
+    try {
+      console.log('Starting logout process...')
+
+      // Clear user store first
+      const userStore = useUserStore()
+      userStore.clearUser()
+
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        console.error('Logout error:', error)
+        throw error
+      }
+
+      console.log('Successfully logged out, navigating to login...')
+
+      // Force navigation to login page
+      await navigateTo('/login', { replace: true })
+
+      // Reload the page as fallback to ensure clean state
+      window.location.href = '/login'
+    } catch (error) {
+      console.error('Error during logout:', error)
+
+      // Force redirect as fallback even if there's an error
+      window.location.href = '/login'
+    }
   }
 }]])
 </script>

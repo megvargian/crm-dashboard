@@ -33,6 +33,41 @@ export const useUserStore = defineStore('user', {
     clearUser() {
       this.user = {} as ClientProfile | null
       this.clientProfile = null
+    },
+    async fetchClientProfile() {
+      const supabase = useSupabaseClient()
+
+      try {
+        // Get current session
+        const { data: { session } } = await supabase.auth.getSession()
+
+        if (!session) {
+          console.log('No active session')
+          return
+        }
+
+        // Call the get-client-profile API
+        const response = await fetch('/api/client-profile/get-client-profile', {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`
+          }
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.statusMessage || 'Failed to fetch client profile')
+        }
+
+        const result = await response.json()
+
+        if (result.profile) {
+          this.setClientProfile(result.profile)
+          console.log('Client profile loaded:', result.profile)
+        }
+      } catch (error) {
+        console.error('Failed to fetch client profile:', error)
+      }
     }
   }
 })

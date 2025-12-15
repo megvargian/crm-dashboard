@@ -42,8 +42,8 @@ const links = [[{
       open.value = false
     }
   }, {
-    label: 'Members',
-    to: '/settings/members',
+    label: 'Employees',
+    to: '/settings/employees',
     onSelect: () => {
       open.value = false
     }
