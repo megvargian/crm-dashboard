@@ -41,7 +41,22 @@ export default eventHandler(async (event) => {
         })
       }
 
-      // Check if user is admin
+      // Check if user is admin client (not employee)
+      // First check if user is an employee
+      const { data: employee, error: employeeCheckError } = await supabase
+        .from('employee')
+        .select('id')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (employee) {
+        throw createError({
+          statusCode: 403,
+          statusMessage: 'Employees cannot access employee management'
+        })
+      }
+
+      // Check if user is admin client
       const { data: profile, error: profileError } = await supabase
         .from('client_profile')
         .select('role')

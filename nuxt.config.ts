@@ -16,7 +16,7 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     supabase: {
-      serviceKey: process.env.SUPABASE_SERVICE_ROLE
+      serviceKey: process.env.SUPABASE_SECRET_KEY
     }
   },
 
@@ -39,6 +39,6 @@ export default defineNuxtConfig({
 
   supabase: {
     redirect: false,
-    serviceKey: process.env.SUPABASE_SERVICE_ROLE
+    serviceKey: process.env.SUPABASE_SECRET_KEY
   }
 })

@@ -19,11 +19,11 @@ const employeeSchema = z.object({
   working_week_days: z.string().optional()
 })
 
-// Check if user is admin
-if (userStore.clientProfile?.role !== 'admin') {
+// Check if user is admin client
+if (userStore.clientProfile?.role !== 'admin' || userStore.clientProfile?.user_type !== 'client') {
   throw createError({
     statusCode: 403,
-    statusMessage: 'Admin access required'
+    statusMessage: 'Admin client access required'
   })
 }
 

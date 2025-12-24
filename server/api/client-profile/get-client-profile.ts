@@ -38,7 +38,28 @@ export default eventHandler(async (event) => {
       })
     }
 
-    // Get client profile data
+    // First check if user is an employee
+    const { data: employee, error: employeeError } = await supabase
+      .from('employee')
+      .select('*')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (employeeError) {
+      console.error('Employee check error:', employeeError)
+    }
+
+    // If user is an employee, return employee data
+    if (employee) {
+      return {
+        profile: {
+          ...employee,
+          user_type: 'employee'
+        }
+      }
+    }
+
+    // If not an employee, check client_profile table
     const { data: profile, error: profileError } = await supabase
       .from('client_profile')
       .select('*')
@@ -56,11 +77,16 @@ export default eventHandler(async (event) => {
     if (!profile) {
       throw createError({
         statusCode: 404,
-        statusMessage: 'Client profile not found'
+        statusMessage: 'User profile not found'
       })
     }
 
-    return { profile }
+    return {
+      profile: {
+        ...profile,
+        user_type: 'client'
+      }
+    }
   } catch (error) {
     console.error('Client profile API error:', error)
     throw createError({

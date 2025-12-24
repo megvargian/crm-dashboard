@@ -9,8 +9,8 @@ watch(() => userStore.clientProfile, (newProfile) => {
   console.log('Profile changed:', newProfile)
 }, { immediate: true })
 
-// Filter navigation based on user role
-const allLinks = [[{
+// Base navigation items
+const baseLinks = [[{
   label: 'General',
   icon: 'i-lucide-user',
   to: '/settings',
@@ -34,22 +34,28 @@ const allLinks = [[{
   target: '_blank'
 }]]
 
-// Remove Employees tab if user is not admin
+// Filter navigation based on user role and type
 const links = computed(() => {
   console.log('Computing links...')
   console.log('User profile:', userStore.clientProfile)
   console.log('User role:', userStore.clientProfile?.role)
+  console.log('User type:', userStore.clientProfile?.user_type)
 
-  const filteredLinks = allLinks.map(group =>
+  const filteredLinks = baseLinks.map(group =>
     group.filter((link) => {
       if (link.label === 'Employees') {
-        const isAdmin = userStore.clientProfile?.role === 'admin'
-        console.log('Employee tab check - isAdmin:', isAdmin)
-        return isAdmin
+        // Only show Employees tab for admin clients, not for employees
+        const isAdminClient = userStore.clientProfile?.role === 'admin' &&
+                             userStore.clientProfile?.user_type === 'client'
+        console.log('Employee tab check - isAdminClient:', isAdminClient)
+        console.log('Role:', userStore.clientProfile?.role)
+        console.log('Type:', userStore.clientProfile?.user_type)
+        return isAdminClient
       }
       return true
     })
   )
+
   console.log('Final filtered links:', filteredLinks)
   return filteredLinks
 }) satisfies ComputedRef<NavigationMenuItem[][]>
