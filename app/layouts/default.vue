@@ -45,6 +45,12 @@ const baseLinks = [[{
       open.value = false
     }
   }, {
+    label: 'Services',
+    to: '/settings/services',
+    onSelect: () => {
+      open.value = false
+    }
+  }, {
     label: 'Employees',
     to: '/settings/employees',
     onSelect: () => {
@@ -80,9 +86,9 @@ const links = computed(() => {
   return baseLinks.map(group =>
     group.map((link) => {
       if (link.label === 'Settings' && link.children) {
-        // Filter out Employees from Settings submenu for non-admin clients
-        const filteredChildren = link.children.filter((child) => {
-          if (child.label === 'Employees') {
+        // Filter out Services and Employees from Settings submenu for non-admin clients
+        const filteredChildren = link.children.filter(child => {
+          if (child.label === 'Services' || child.label === 'Employees') {
             const isAdminClient = userStore.clientProfile?.role === 'admin'
               && userStore.clientProfile?.user_type === 'client'
             return isAdminClient

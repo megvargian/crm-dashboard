@@ -16,6 +16,10 @@ const baseLinks = [[{
   to: '/settings',
   exact: true
 }, {
+  label: 'Services',
+  icon: 'i-lucide-wrench',
+  to: '/settings/services'
+}, {
   label: 'Employees',
   icon: 'i-lucide-users',
   to: '/settings/employees'
@@ -43,11 +47,11 @@ const links = computed(() => {
 
   const filteredLinks = baseLinks.map(group =>
     group.filter((link) => {
-      if (link.label === 'Employees') {
-        // Only show Employees tab for admin clients, not for employees
+      if (link.label === 'Services' || link.label === 'Employees') {
+        // Only show Services and Employees tabs for admin clients, not for employees
         const isAdminClient = userStore.clientProfile?.role === 'admin' &&
                              userStore.clientProfile?.user_type === 'client'
-        console.log('Employee tab check - isAdminClient:', isAdminClient)
+        console.log(`${link.label} tab check - isAdminClient:`, isAdminClient)
         console.log('Role:', userStore.clientProfile?.role)
         console.log('Type:', userStore.clientProfile?.user_type)
         return isAdminClient
