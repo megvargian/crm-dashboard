@@ -16,6 +16,10 @@ const baseLinks = [[{
   to: '/settings',
   exact: true
 }, {
+  label: 'Calendar',
+  icon: 'i-lucide-calendar',
+  to: '/settings/calendar'
+}, {
   label: 'Services',
   icon: 'i-lucide-wrench',
   to: '/settings/services'
@@ -47,6 +51,14 @@ const links = computed(() => {
 
   const filteredLinks = baseLinks.map(group =>
     group.filter((link) => {
+      if (link.label === 'Calendar') {
+        // Calendar is available for both admin clients and employees
+        const hasAccess = (userStore.clientProfile?.role === 'admin' && userStore.clientProfile?.user_type === 'client') ||
+                         userStore.clientProfile?.user_type === 'employee'
+        console.log(`${link.label} tab check - hasAccess:`, hasAccess)
+        return hasAccess
+      }
+
       if (link.label === 'Services' || link.label === 'Employees') {
         // Only show Services and Employees tabs for admin clients, not for employees
         const isAdminClient = userStore.clientProfile?.role === 'admin' &&
