@@ -1,3 +1,4 @@
+/* eslint-disable no-case-declarations */
 
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
@@ -193,7 +194,7 @@ export default eventHandler(async (event) => {
         }
 
         const validatedUpdateData = updateBookingSchema.parse(updateBody)
-        let finalUpdateData = { ...validatedUpdateData }
+        const finalUpdateData = { ...validatedUpdateData }
 
         // If service is being changed, recalculate end time and price
         if (validatedUpdateData.service_id || validatedUpdateData.start_time || validatedUpdateData.booking_date) {

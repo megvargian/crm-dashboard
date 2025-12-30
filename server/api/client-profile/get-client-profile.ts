@@ -1,12 +1,18 @@
 import { createClient } from '@supabase/supabase-js'
 
 export default eventHandler(async (event) => {
+  console.log('get-client-profile API called')
+
   try {
     const config = useRuntimeConfig()
     const supabaseUrl = process.env.SUPABASE_URL
     const supabaseServiceKey = config.supabase?.serviceKey || process.env.SUPABASE_SECRET_KEY
 
+    console.log('Supabase URL exists:', !!supabaseUrl)
+    console.log('Supabase Service Key exists:', !!supabaseServiceKey)
+
     if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('Missing Supabase configuration')
       throw createError({
         statusCode: 500,
         statusMessage: 'Supabase configuration missing'
@@ -47,10 +53,12 @@ export default eventHandler(async (event) => {
 
     if (employeeError) {
       console.error('Employee check error:', employeeError)
+      // Don't throw here, just continue to check client_profile
     }
 
     // If user is an employee, return employee data
     if (employee) {
+      console.log('User is employee:', employee.id)
       return {
         profile: {
           ...employee,
@@ -58,6 +66,8 @@ export default eventHandler(async (event) => {
         }
       }
     }
+
+    console.log('User is not employee, checking client_profile for user ID:', user.id)
 
     // If not an employee, check client_profile table
     const { data: profile, error: profileError } = await supabase
@@ -75,11 +85,14 @@ export default eventHandler(async (event) => {
     }
 
     if (!profile) {
+      console.error('No profile found for user:', user.id)
       throw createError({
         statusCode: 404,
         statusMessage: 'User profile not found'
       })
     }
+
+    console.log('Found client profile:', profile.id)
 
     return {
       profile: {
@@ -89,9 +102,20 @@ export default eventHandler(async (event) => {
     }
   } catch (error) {
     console.error('Client profile API error:', error)
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      statusCode: error.statusCode,
+      statusMessage: error.statusMessage
+    })
+
+    if (error.statusCode) {
+      throw error
+    }
+
     throw createError({
       statusCode: 500,
-      statusMessage: 'Internal server error'
+      statusMessage: `Internal server error: ${error.message}`
     })
   }
 })

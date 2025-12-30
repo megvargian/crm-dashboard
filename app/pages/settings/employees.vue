@@ -28,12 +28,15 @@ if (userStore.clientProfile?.role !== 'admin' || userStore.clientProfile?.user_t
 }
 
 const { data: employees, refresh: refreshEmployees } = await useFetch<Employee[]>('/api/employees', { default: () => [] })
+const { data: services } = await useFetch('/api/services', { default: () => [] })
 
 const q = ref('')
 const showAddModal = ref(false)
 const showEditModal = ref(false)
 const loading = ref(false)
 const editingEmployee = ref<Employee | null>(null)
+const selectedServices = ref<string[]>([])
+const editSelectedServices = ref<string[]>([])
 
 const newEmployee = ref<{
   full_name: string
@@ -122,6 +125,11 @@ async function addEmployee() {
       throw new Error(result.error)
     }
 
+    // Assign services if any selected
+    if (selectedServices.value.length > 0) {
+      await assignServicesToEmployee(result.employee.id, selectedServices.value)
+    }
+
     toast.add({
       title: 'Success',
       description: 'Employee added successfully',
@@ -130,6 +138,7 @@ async function addEmployee() {
     })
 
     showAddModal.value = false
+    selectedServices.value = []
     newEmployee.value = {
       full_name: '',
       email: '',
@@ -155,7 +164,47 @@ async function addEmployee() {
   }
 }
 
-function openEditModal(employee: Employee) {
+async function assignServicesToEmployee(employeeId: string, serviceIds: string[]) {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error('No active session')
+
+    // First, remove all existing assignments
+    const currentAssignments = await fetch(`/api/employee-services?employee_id=${employeeId}`, {
+      headers: { Authorization: `Bearer ${session.access_token}` }
+    })
+
+    if (currentAssignments.ok) {
+      const assignments = await currentAssignments.json()
+      for (const assignment of assignments) {
+        await fetch(`/api/employee-services?employee_id=${employeeId}&service_id=${assignment.service_id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${session.access_token}` }
+        })
+      }
+    }
+
+    // Then add new assignments
+    for (const serviceId of serviceIds) {
+      await fetch('/api/employee-services', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          employee_id: employeeId,
+          service_id: serviceId
+        })
+      })
+    }
+  } catch (error) {
+    console.error('Error assigning services:', error)
+    throw error
+  }
+}
+
+async function openEditModal(employee: Employee) {
   editingEmployee.value = employee
   editEmployee.value = {
     full_name: employee.full_name || '',
@@ -171,6 +220,24 @@ function openEditModal(employee: Employee) {
       ? employee.working_week_days.join(', ')
       : employee.working_week_days || ''
   }
+
+  // Load current services for this employee
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session) {
+      const response = await fetch(`/api/employee-services?employee_id=${employee.id}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      })
+      if (response.ok) {
+        const assignments = await response.json()
+        editSelectedServices.value = assignments.map((assignment: any) => assignment.service_id)
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load employee services:', error)
+    editSelectedServices.value = []
+  }
+
   showEditModal.value = true
 }
 
@@ -213,8 +280,14 @@ async function updateEmployee() {
       color: 'success'
     })
 
+    // Update service assignments
+    if (editingEmployee.value) {
+      await assignServicesToEmployee(editingEmployee.value.id, editSelectedServices.value)
+    }
+
     showEditModal.value = false
     editingEmployee.value = null
+    editSelectedServices.value = []
     await refreshEmployees()
   } catch (error) {
     console.error('Error updating employee:', error)
@@ -362,6 +435,53 @@ async function removeEmployee(employeeId: string) {
             <UInput v-model="newEmployee.working_week_days" placeholder="Monday, Tuesday, Wednesday, Thursday, Friday (comma-separated)" />
           </UFormField>
 
+          <UFormField name="assigned_services" label="Assigned Services">
+            <USelectMenu
+              v-model="selectedServices"
+              :options="services.map((service: { name: any; price: any; id: any; description: any; duration_service_in_s: any }) => ({
+                label: `${service.name} - $${service.price}`,
+                value: service.id,
+                name: service.name,
+                description: service.description,
+                price: service.price,
+                duration_service_in_s: service.duration_service_in_s
+              }))"
+              multiple
+              searchable
+              searchable-placeholder="Search services..."
+              placeholder="Select services for this employee"
+              option-attribute="label"
+              value-attribute="value"
+              :search-attributes="['name', 'description']"
+              class="w-full"
+            >
+              <template #option="{ option }">
+                <div class="flex items-center justify-between w-full">
+                  <div>
+                    <div class="font-medium">
+                      {{ option.name }}
+                    </div>
+                    <div class="text-sm text-gray-500">
+                      {{ option.description }}
+                    </div>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-sm font-semibold">
+                      ${{ option.price }}
+                    </div>
+                    <div class="text-xs text-gray-500">
+                      {{ Math.round(option.duration_service_in_s / 3600 * 10) / 10 }}h
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <template #option-empty="{ query }">
+                <q>{{ query }}</q> not found
+              </template>
+            </USelectMenu>
+          </UFormField>
+
           <div class="flex gap-2 justify-end">
             <UButton type="button" variant="outline" @click="showAddModal = false">
               Cancel
@@ -445,6 +565,53 @@ async function removeEmployee(employeeId: string) {
 
           <UFormField name="working_week_days" label="Working Days">
             <UInput v-model="editEmployee.working_week_days" placeholder="Monday, Tuesday, Wednesday, Thursday, Friday (comma-separated)" />
+          </UFormField>
+
+          <UFormField name="assigned_services" label="Assigned Services">
+            <USelectMenu
+              v-model="editSelectedServices"
+              :options="services.map((service: { name: any; price: any; id: any; description: any; duration_service_in_s: any }) => ({
+                label: `${service.name} - $${service.price}`,
+                value: service.id,
+                name: service.name,
+                description: service.description,
+                price: service.price,
+                duration_service_in_s: service.duration_service_in_s
+              }))"
+              multiple
+              searchable
+              searchable-placeholder="Search services..."
+              placeholder="Select services for this employee"
+              option-attribute="label"
+              value-attribute="value"
+              :search-attributes="['name', 'description']"
+              class="w-full"
+            >
+              <template #option="{ option }">
+                <div class="flex items-center justify-between w-full">
+                  <div>
+                    <div class="font-medium">
+                      {{ option.name }}
+                    </div>
+                    <div class="text-sm text-gray-500">
+                      {{ option.description }}
+                    </div>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-sm font-semibold">
+                      ${{ option.price }}
+                    </div>
+                    <div class="text-xs text-gray-500">
+                      {{ Math.round(option.duration_service_in_s / 3600 * 10) / 10 }}h
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <template #option-empty="{ query }">
+                <q>{{ query }}</q> not found
+              </template>
+            </USelectMenu>
           </UFormField>
 
           <div class="flex gap-2 justify-end">
