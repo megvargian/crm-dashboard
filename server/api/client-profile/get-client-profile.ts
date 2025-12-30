@@ -5,14 +5,26 @@ export default eventHandler(async (event) => {
 
   try {
     const config = useRuntimeConfig()
-    const supabaseUrl = process.env.SUPABASE_URL
-    const supabaseServiceKey = config.supabase?.serviceKey || process.env.SUPABASE_SECRET_KEY
+
+    // Try multiple ways to get the configuration for better Netlify compatibility
+    const supabaseUrl = config.supabaseUrl ||
+                       config.public?.supabaseUrl ||
+                       process.env.SUPABASE_URL ||
+                       process.env.NUXT_SUPABASE_URL
+
+    const supabaseServiceKey = config.supabaseServiceKey ||
+                              config.supabase?.serviceKey ||
+                              process.env.SUPABASE_SECRET_KEY ||
+                              process.env.SUPABASE_SERVICE_ROLE_KEY ||
+                              process.env.NUXT_SUPABASE_SERVICE_KEY
 
     console.log('Supabase URL exists:', !!supabaseUrl)
     console.log('Supabase Service Key exists:', !!supabaseServiceKey)
+    console.log('Config keys:', Object.keys(config))
 
     if (!supabaseUrl || !supabaseServiceKey) {
       console.error('Missing Supabase configuration')
+      console.error('Available env vars:', Object.keys(process.env).filter(key => key.includes('SUPABASE')))
       throw createError({
         statusCode: 500,
         statusMessage: 'Supabase configuration missing'

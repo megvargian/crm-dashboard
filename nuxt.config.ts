@@ -15,8 +15,16 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
 
   runtimeConfig: {
+    // Server-side environment variables
+    supabaseUrl: process.env.SUPABASE_URL,
+    supabaseServiceKey: process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY,
     supabase: {
-      serviceKey: process.env.SUPABASE_SECRET_KEY
+      serviceKey: process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
+    },
+    // Public environment variables (exposed to client)
+    public: {
+      supabaseUrl: process.env.SUPABASE_URL,
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY
     }
   },
 
