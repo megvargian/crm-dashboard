@@ -222,7 +222,7 @@ async function assignServicesToEmployee(employeeId: string, serviceNames: string
     if (!session) throw new Error('No active session')
 
     // Map service names to service IDs
-    const serviceIds = serviceNames.map(serviceName => {
+    const serviceIds = serviceNames.map((serviceName) => {
       const service = services.value.find((s: any) => s.name === serviceName)
       return service ? service.id : null
     }).filter(Boolean) // Remove any null values
@@ -396,255 +396,256 @@ async function removeEmployee(employeeId: string) {
 </script>
 
 <template>
-  <div>
-    <UPageCard
-      title="Employees"
-      description="Manage employees and their access."
-      variant="naked"
-      orientation="horizontal"
-      class="mb-4"
-    >
-      <UButton
-        label="Add Employee"
-        color="neutral"
-        class="w-fit lg:ms-auto"
-        @click.stop="showAddModal = true"
-      />
-    </UPageCard>
+  <UDashboardPanel id="employees">
+    <template #header>
+      <UDashboardNavbar title="Employees">
+        <template #leading>
+          <UDashboardSidebarCollapse />
+        </template>
 
-    <UPageCard variant="subtle" :ui="{ container: 'p-0 sm:p-0 gap-y-0', wrapper: 'items-stretch', header: 'p-4 mb-0 border-b border-default' }">
-      <template #header>
+        <template #right>
+          <UButton
+            label="Add Employee"
+            color="primary"
+            @click.stop="showAddModal = true"
+          />
+        </template>
+      </UDashboardNavbar>
+    </template>
+
+    <template #body>
+      <div class="flex flex-col gap-4">
         <UInput
           v-model="q"
           icon="i-lucide-search"
           placeholder="Search employees"
           autofocus
-          class="w-full"
+          class="max-w-sm"
           @click.stop
         />
+
+        <SettingsEmployeeList :employees="filteredEmployees" @remove-employee="removeEmployee" @edit-employee="openEditModal" />
+      </div>
+    </template>
+  </UDashboardPanel>
+
+  <!-- Add Employee Form -->
+  <div v-if="showAddModal" class="mt-6">
+    <UCard>
+      <template #header>
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">
+              Add New Employee
+            </h3>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Create a new employee account
+            </p>
+          </div>
+          <UButton
+            color="neutral"
+            variant="ghost"
+            icon="i-heroicons-x-mark-20-solid"
+            class="-my-1"
+            @click="showAddModal = false"
+          />
+        </div>
       </template>
+      <UForm
+        :schema="employeeSchema"
+        :state="newEmployee"
+        class="space-y-4"
+        @submit="addEmployee"
+      >
+        <UFormField name="full_name" label="Full Name" required>
+          <UInput v-model="newEmployee.full_name" placeholder="John Doe" />
+        </UFormField>
 
-      <SettingsEmployeeList :employees="filteredEmployees" @remove-employee="removeEmployee" @edit-employee="openEditModal" />
-    </UPageCard>
+        <UFormField name="email" label="Email" required>
+          <UInput v-model="newEmployee.email" type="email" placeholder="john@example.com" />
+        </UFormField>
 
-    <!-- Add Employee Form -->
-    <div v-if="showAddModal" class="mt-6">
-      <UCard>
-        <template #header>
-          <div class="flex items-center justify-between">
-            <div>
-              <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">
-                Add New Employee
-              </h3>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Create a new employee account
-              </p>
-            </div>
-            <UButton
-              color="neutral"
-              variant="ghost"
-              icon="i-heroicons-x-mark-20-solid"
-              class="-my-1"
-              @click="showAddModal = false"
-            />
-          </div>
-        </template>
-        <UForm
-          :schema="employeeSchema"
-          :state="newEmployee"
-          class="space-y-4"
-          @submit="addEmployee"
-        >
-          <UFormField name="full_name" label="Full Name" required>
-            <UInput v-model="newEmployee.full_name" placeholder="John Doe" />
+        <UFormField name="password" label="Temporary Password" required>
+          <UInput v-model="newEmployee.password" type="password" placeholder="Enter temporary password" />
+        </UFormField>
+
+        <UFormField name="phone_number" label="Phone Number">
+          <UInput v-model="newEmployee.phone_number" placeholder="+1234567890" />
+        </UFormField>
+
+        <UFormField name="role" label="Role">
+          <USelect
+            v-model="newEmployee.role"
+            :options="[
+              { label: 'Employee', value: 'employee' },
+              { label: 'Admin', value: 'admin' }
+            ]"
+          />
+        </UFormField>
+
+        <div class="grid grid-cols-2 gap-4">
+          <UFormField name="start_working_hour" label="Start Hour">
+            <UInput v-model="newEmployee.start_working_hour" type="time" />
           </UFormField>
 
-          <UFormField name="email" label="Email" required>
-            <UInput v-model="newEmployee.email" type="email" placeholder="john@example.com" />
+          <UFormField name="end_working_hours" label="End Hour">
+            <UInput v-model="newEmployee.end_working_hours" type="time" />
           </UFormField>
+        </div>
 
-          <UFormField name="password" label="Temporary Password" required>
-            <UInput v-model="newEmployee.password" type="password" placeholder="Enter temporary password" />
-          </UFormField>
+        <UFormField name="working_week_days" label="Working Days">
+          <UInput v-model="newEmployee.working_week_days" placeholder="Monday, Tuesday, Wednesday, Thursday, Friday (comma-separated)" />
+        </UFormField>
 
-          <UFormField name="phone_number" label="Phone Number">
-            <UInput v-model="newEmployee.phone_number" placeholder="+1234567890" />
-          </UFormField>
-
-          <UFormField name="role" label="Role">
-            <USelect
-              v-model="newEmployee.role"
-              :options="[
-                { label: 'Employee', value: 'employee' },
-                { label: 'Admin', value: 'admin' }
-              ]"
-            />
-          </UFormField>
-
-          <div class="grid grid-cols-2 gap-4">
-            <UFormField name="start_working_hour" label="Start Hour">
-              <UInput v-model="newEmployee.start_working_hour" type="time" />
-            </UFormField>
-
-            <UFormField name="end_working_hours" label="End Hour">
-              <UInput v-model="newEmployee.end_working_hours" type="time" />
-            </UFormField>
+        <UFormField name="assigned_services" label="Assigned Services">
+          <div v-if="servicesLoading" class="text-sm text-gray-500">
+            Loading services...
           </div>
 
-          <UFormField name="working_week_days" label="Working Days">
-            <UInput v-model="newEmployee.working_week_days" placeholder="Monday, Tuesday, Wednesday, Thursday, Friday (comma-separated)" />
-          </UFormField>
-
-          <UFormField name="assigned_services" label="Assigned Services">
-            <div v-if="servicesLoading" class="text-sm text-gray-500">
-              Loading services...
-            </div>
-
-            <div v-else-if="!serviceOptions.length" class="text-sm text-red-500">
-              No services available
-            </div>
-
-            <select
-              v-if="serviceOptions.length > 0"
-              v-model="selectedServices"
-              multiple
-              class="w-full p-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 min-h-[100px]"
-            >
-              <option v-for="serviceName in serviceOptions" :key="serviceName" :value="serviceName">
-                {{ serviceName }}
-              </option>
-            </select>
-            <div v-else class="text-sm text-gray-500 p-2 border rounded">
-              No services available
-            </div>
-
-            <!-- Debug info -->
-            <div v-if="serviceOptions.length" class="mt-1 text-xs text-gray-400">
-              Debug: {{ selectedServices.length }} selected, {{ serviceOptions.length }} available
-            </div>
-          </UFormField>
-
-          <div class="flex gap-2 justify-end">
-            <UButton type="button" variant="outline" @click="showAddModal = false">
-              Cancel
-            </UButton>
-            <UButton type="submit" :loading="loading">
-              Add Employee
-            </UButton>
-          </div>
-        </UForm>
-      </UCard>
-    </div>
-
-    <!-- Edit Employee Form -->
-    <div v-if="showEditModal" class="mt-6">
-      <UCard>
-        <template #header>
-          <div class="flex items-center justify-between">
-            <div>
-              <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">
-                Edit Employee
-              </h3>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Update employee information
-              </p>
-            </div>
-            <UButton
-              color="neutral"
-              variant="ghost"
-              icon="i-heroicons-x-mark-20-solid"
-              class="-my-1"
-              @click="showEditModal = false"
-            />
-          </div>
-        </template>
-        <UForm
-          :schema="employeeSchema.partial({ password: true })"
-          :state="editEmployee"
-          class="space-y-4"
-          @submit="updateEmployee"
-        >
-          <UFormField name="full_name" label="Full Name" required>
-            <UInput v-model="editEmployee.full_name" placeholder="John Doe" />
-          </UFormField>
-
-          <UFormField name="email" label="Email" required>
-            <UInput
-              v-model="editEmployee.email"
-              type="email"
-              placeholder="john@example.com"
-              disabled
-            />
-          </UFormField>
-
-          <UFormField name="phone_number" label="Phone Number">
-            <UInput v-model="editEmployee.phone_number" placeholder="+1234567890" />
-          </UFormField>
-
-          <UFormField name="role" label="Role">
-            <USelect
-              v-model="editEmployee.role"
-              :options="[
-                { label: 'Employee', value: 'employee' },
-                { label: 'Admin', value: 'admin' }
-              ]"
-            />
-          </UFormField>
-
-          <div class="grid grid-cols-2 gap-4">
-            <UFormField name="start_working_hour" label="Start Hour">
-              <UInput v-model="editEmployee.start_working_hour" type="time" />
-            </UFormField>
-
-            <UFormField name="end_working_hours" label="End Hour">
-              <UInput v-model="editEmployee.end_working_hours" type="time" />
-            </UFormField>
+          <div v-else-if="!serviceOptions.length" class="text-sm text-red-500">
+            No services available
           </div>
 
-          <UFormField name="working_week_days" label="Working Days">
-            <UInput v-model="editEmployee.working_week_days" placeholder="Monday, Tuesday, Wednesday, Thursday, Friday (comma-separated)" />
-          </UFormField>
-
-          <UFormField name="assigned_services" label="Assigned Services">
-            <div v-if="servicesLoading" class="text-sm text-gray-500">
-              Loading services...
-            </div>
-            <div v-else-if="!serviceOptions.length" class="text-sm text-red-500">
-              No services available ({{ services.length }} services loaded, {{ serviceOptions.length }} options generated)
-            </div>
-            <div v-else class="mb-2 text-xs text-gray-500">
-              {{ serviceOptions.length }} services available
-            </div>
-            <select
-              v-if="serviceOptions.length > 0"
-              v-model="editSelectedServices"
-              multiple
-              class="w-full p-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 min-h-[100px]"
-            >
-              <option v-for="serviceName in serviceOptions" :key="serviceName" :value="serviceName">
-                {{ serviceName }}
-              </option>
-            </select>
-            <div v-else class="text-sm text-gray-500 p-2 border rounded">
-              No services available
-            </div>
-            <!-- Debug info -->
-            <div v-if="serviceOptions.length > 0" class="mt-1 text-xs text-gray-400">
-              Debug: {{ editSelectedServices.length }} selected, {{ serviceOptions.length }} available
-              <br>Services: {{ serviceOptions.join(', ') }}
-            </div>
-          </UFormField>
-
-          <div class="flex gap-2 justify-end">
-            <UButton type="button" variant="outline" @click="showEditModal = false">
-              Cancel
-            </UButton>
-            <UButton type="submit" :loading="loading">
-              Update Employee
-            </UButton>
+          <select
+            v-if="serviceOptions.length > 0"
+            v-model="selectedServices"
+            multiple
+            class="w-full p-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 min-h-[100px]"
+          >
+            <option v-for="serviceName in serviceOptions" :key="serviceName" :value="serviceName">
+              {{ serviceName }}
+            </option>
+          </select>
+          <div v-else class="text-sm text-gray-500 p-2 border rounded">
+            No services available
           </div>
-        </UForm>
-      </UCard>
-    </div>
+
+          <!-- Debug info -->
+          <div v-if="serviceOptions.length" class="mt-1 text-xs text-gray-400">
+            Debug: {{ selectedServices.length }} selected, {{ serviceOptions.length }} available
+          </div>
+        </UFormField>
+
+        <div class="flex gap-2 justify-end">
+          <UButton type="button" variant="outline" @click="showAddModal = false">
+            Cancel
+          </UButton>
+          <UButton type="submit" :loading="loading">
+            Add Employee
+          </UButton>
+        </div>
+      </UForm>
+    </UCard>
+  </div>
+
+  <!-- Edit Employee Form -->
+  <div v-if="showEditModal" class="mt-6">
+    <UCard>
+      <template #header>
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">
+              Edit Employee
+            </h3>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Update employee information
+            </p>
+          </div>
+          <UButton
+            color="neutral"
+            variant="ghost"
+            icon="i-heroicons-x-mark-20-solid"
+            class="-my-1"
+            @click="showEditModal = false"
+          />
+        </div>
+      </template>
+      <UForm
+        :schema="employeeSchema.partial({ password: true })"
+        :state="editEmployee"
+        class="space-y-4"
+        @submit="updateEmployee"
+      >
+        <UFormField name="full_name" label="Full Name" required>
+          <UInput v-model="editEmployee.full_name" placeholder="John Doe" />
+        </UFormField>
+
+        <UFormField name="email" label="Email" required>
+          <UInput
+            v-model="editEmployee.email"
+            type="email"
+            placeholder="john@example.com"
+            disabled
+          />
+        </UFormField>
+
+        <UFormField name="phone_number" label="Phone Number">
+          <UInput v-model="editEmployee.phone_number" placeholder="+1234567890" />
+        </UFormField>
+
+        <UFormField name="role" label="Role">
+          <USelect
+            v-model="editEmployee.role"
+            :options="[
+              { label: 'Employee', value: 'employee' },
+              { label: 'Admin', value: 'admin' }
+            ]"
+          />
+        </UFormField>
+
+        <div class="grid grid-cols-2 gap-4">
+          <UFormField name="start_working_hour" label="Start Hour">
+            <UInput v-model="editEmployee.start_working_hour" type="time" />
+          </UFormField>
+
+          <UFormField name="end_working_hours" label="End Hour">
+            <UInput v-model="editEmployee.end_working_hours" type="time" />
+          </UFormField>
+        </div>
+
+        <UFormField name="working_week_days" label="Working Days">
+          <UInput v-model="editEmployee.working_week_days" placeholder="Monday, Tuesday, Wednesday, Thursday, Friday (comma-separated)" />
+        </UFormField>
+
+        <UFormField name="assigned_services" label="Assigned Services">
+          <div v-if="servicesLoading" class="text-sm text-gray-500">
+            Loading services...
+          </div>
+          <div v-else-if="!serviceOptions.length" class="text-sm text-red-500">
+            No services available ({{ services.length }} services loaded, {{ serviceOptions.length }} options generated)
+          </div>
+          <div v-else class="mb-2 text-xs text-gray-500">
+            {{ serviceOptions.length }} services available
+          </div>
+          <select
+            v-if="serviceOptions.length > 0"
+            v-model="editSelectedServices"
+            multiple
+            class="w-full p-2 border rounded-md dark:bg-gray-800 dark:border-gray-600 min-h-[100px]"
+          >
+            <option v-for="serviceName in serviceOptions" :key="serviceName" :value="serviceName">
+              {{ serviceName }}
+            </option>
+          </select>
+          <div v-else class="text-sm text-gray-500 p-2 border rounded">
+            No services available
+          </div>
+          <!-- Debug info -->
+          <div v-if="serviceOptions.length > 0" class="mt-1 text-xs text-gray-400">
+            Debug: {{ editSelectedServices.length }} selected, {{ serviceOptions.length }} available
+            <br>Services: {{ serviceOptions.join(', ') }}
+          </div>
+        </UFormField>
+
+        <div class="flex gap-2 justify-end">
+          <UButton type="button" variant="outline" @click="showEditModal = false">
+            Cancel
+          </UButton>
+          <UButton type="submit" :loading="loading">
+            Update Employee
+          </UButton>
+        </div>
+      </UForm>
+    </UCard>
   </div>
 </template>

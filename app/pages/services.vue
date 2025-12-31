@@ -52,8 +52,8 @@ const editService = ref({
 const filteredServices = computed(() => {
   if (!services.value) return []
   return services.value.filter((service) => {
-    return service.name.search(new RegExp(q.value, 'i')) !== -1 ||
-           (service.description && service.description.search(new RegExp(q.value, 'i')) !== -1)
+    return service.name.search(new RegExp(q.value, 'i')) !== -1
+      || (service.description && service.description.search(new RegExp(q.value, 'i')) !== -1)
   })
 })
 
@@ -158,8 +158,8 @@ async function updateService() {
         duration_service_in_s: Number(editService.value.duration_hours) * 3600, // Convert hours to seconds
         categories: editService.value.categories
           ? (typeof editService.value.categories === 'string'
-             ? editService.value.categories.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0)
-             : editService.value.categories)
+              ? editService.value.categories.split(',').map((s: string) => s.trim()).filter((s: string) => s.length > 0)
+              : editService.value.categories)
           : []
       })
     })
@@ -203,7 +203,7 @@ async function removeService(serviceId: string) {
     const response = await fetch(`/api/services?id=${serviceId}`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${session.access_token}`
+        Authorization: `Bearer ${session.access_token}`
       }
     })
 
@@ -233,159 +233,180 @@ async function removeService(serviceId: string) {
 </script>
 
 <template>
-  <div>
-    <UPageCard
-      title="Services"
-      description="Manage services and their details."
-      variant="naked"
-      orientation="horizontal"
-      class="mb-4"
-    >
-      <UButton
-        label="Add Service"
-        color="neutral"
-        class="w-fit lg:ms-auto"
-        @click.stop="showAddModal = true"
-      />
-    </UPageCard>
+  <UDashboardPanel id="services">
+    <template #header>
+      <UDashboardNavbar title="Services">
+        <template #leading>
+          <UDashboardSidebarCollapse />
+        </template>
 
-    <UPageCard variant="subtle" :ui="{ container: 'p-0 sm:p-0 gap-y-0', wrapper: 'items-stretch', header: 'p-4 mb-0 border-b border-default' }">
-      <template #header>
+        <template #right>
+          <UButton
+            label="Add Service"
+            color="primary"
+            @click.stop="showAddModal = true"
+          />
+        </template>
+      </UDashboardNavbar>
+    </template>
+
+    <template #body>
+      <div class="flex flex-col gap-4">
         <UInput
           v-model="q"
           icon="i-lucide-search"
           placeholder="Search services"
           autofocus
-          class="w-full"
+          class="max-w-sm"
           @click.stop
         />
+
+        <SettingsServicesList :services="filteredServices" @remove-service="removeService" @edit-service="openEditModal" />
+      </div>
+    </template>
+  </UDashboardPanel>
+
+  <!-- Add Service Form -->
+  <div v-if="showAddModal" class="mt-6">
+    <UCard>
+      <template #header>
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">
+              Add New Service
+            </h3>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Create a new service offering
+            </p>
+          </div>
+          <UButton
+            color="neutral"
+            variant="ghost"
+            icon="i-heroicons-x-mark-20-solid"
+            class="-my-1"
+            @click="showAddModal = false"
+          />
+        </div>
       </template>
+      <UForm
+        :schema="serviceSchema"
+        :state="newService"
+        class="space-y-4"
+        @submit="addService"
+      >
+        <UFormField name="name" label="Service Name" required>
+          <UInput v-model="newService.name" placeholder="House Cleaning" />
+        </UFormField>
 
-      <SettingsServicesList :services="filteredServices" @remove-service="removeService" @edit-service="openEditModal" />
-    </UPageCard>
+        <UFormField name="description" label="Description">
+          <UTextarea v-model="newService.description" placeholder="Detailed description of the service" />
+        </UFormField>
 
-    <!-- Add Service Form -->
-    <div v-if="showAddModal" class="mt-6">
-      <UCard>
-        <template #header>
-          <div class="flex items-center justify-between">
-            <div>
-              <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">
-                Add New Service
-              </h3>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Create a new service offering
-              </p>
-            </div>
-            <UButton
-              color="neutral"
-              variant="ghost"
-              icon="i-heroicons-x-mark-20-solid"
-              class="-my-1"
-              @click="showAddModal = false"
+        <div class="grid grid-cols-2 gap-4">
+          <UFormField name="price" label="Price ($)" required>
+            <UInput
+              v-model.number="newService.price"
+              type="number"
+              step="0.01"
+              placeholder="99.99"
             />
-          </div>
-        </template>
-        <UForm
-          :schema="serviceSchema"
-          :state="newService"
-          class="space-y-4"
-          @submit="addService"
-        >
-          <UFormField name="name" label="Service Name" required>
-            <UInput v-model="newService.name" placeholder="House Cleaning" />
           </UFormField>
 
-          <UFormField name="description" label="Description">
-            <UTextarea v-model="newService.description" placeholder="Detailed description of the service" />
-          </UFormField>
-
-          <div class="grid grid-cols-2 gap-4">
-            <UFormField name="price" label="Price ($)" required>
-              <UInput v-model.number="newService.price" type="number" step="0.01" placeholder="99.99" />
-            </UFormField>
-
-            <UFormField name="duration_service_h" label="Duration (hours)">
-              <UInput v-model.number="newService.duration_service_h" type="number" step="0.5" placeholder="2.5" />
-            </UFormField>
-          </div>
-
-          <UFormField name="categories" label="Categories">
-            <UInput v-model="newService.categories" placeholder="Cleaning, Maintenance, Repair (comma-separated)" />
-          </UFormField>
-
-          <div class="flex gap-2 justify-end">
-            <UButton type="button" variant="outline" @click="showAddModal = false">
-              Cancel
-            </UButton>
-            <UButton type="submit" :loading="loading">
-              Add Service
-            </UButton>
-          </div>
-        </UForm>
-      </UCard>
-    </div>
-
-    <!-- Edit Service Form -->
-    <div v-if="showEditModal" class="mt-6">
-      <UCard>
-        <template #header>
-          <div class="flex items-center justify-between">
-            <div>
-              <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">
-                Edit Service
-              </h3>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Update service information
-              </p>
-            </div>
-            <UButton
-              color="neutral"
-              variant="ghost"
-              icon="i-heroicons-x-mark-20-solid"
-              class="-my-1"
-              @click="showEditModal = false"
+          <UFormField name="duration_service_h" label="Duration (hours)">
+            <UInput
+              v-model.number="newService.duration_service_h"
+              type="number"
+              step="0.5"
+              placeholder="2.5"
             />
+          </UFormField>
+        </div>
+
+        <UFormField name="categories" label="Categories">
+          <UInput v-model="newService.categories" placeholder="Cleaning, Maintenance, Repair (comma-separated)" />
+        </UFormField>
+
+        <div class="flex gap-2 justify-end">
+          <UButton type="button" variant="outline" @click="showAddModal = false">
+            Cancel
+          </UButton>
+          <UButton type="submit" :loading="loading">
+            Add Service
+          </UButton>
+        </div>
+      </UForm>
+    </UCard>
+  </div>
+
+  <!-- Edit Service Form -->
+  <div v-if="showEditModal" class="mt-6">
+    <UCard>
+      <template #header>
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-base font-semibold leading-6 text-gray-900 dark:text-white">
+              Edit Service
+            </h3>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Update service information
+            </p>
           </div>
-        </template>
-        <UForm
-          :schema="serviceSchema"
-          :state="editService"
-          class="space-y-4"
-          @submit="updateService"
-        >
-          <UFormField name="name" label="Service Name" required>
-            <UInput v-model="editService.name" placeholder="House Cleaning" />
+          <UButton
+            color="neutral"
+            variant="ghost"
+            icon="i-heroicons-x-mark-20-solid"
+            class="-my-1"
+            @click="showEditModal = false"
+          />
+        </div>
+      </template>
+      <UForm
+        :schema="serviceSchema"
+        :state="editService"
+        class="space-y-4"
+        @submit="updateService"
+      >
+        <UFormField name="name" label="Service Name" required>
+          <UInput v-model="editService.name" placeholder="House Cleaning" />
+        </UFormField>
+
+        <UFormField name="description" label="Description">
+          <UTextarea v-model="editService.description" placeholder="Detailed description of the service" />
+        </UFormField>
+
+        <div class="grid grid-cols-2 gap-4">
+          <UFormField name="price" label="Price ($)" required>
+            <UInput
+              v-model.number="editService.price"
+              type="number"
+              step="0.01"
+              placeholder="99.99"
+            />
           </UFormField>
 
-          <UFormField name="description" label="Description">
-            <UTextarea v-model="editService.description" placeholder="Detailed description of the service" />
+          <UFormField name="duration_service_h" label="Duration (hours)">
+            <UInput
+              v-model.number="editService.duration_hours"
+              type="number"
+              step="0.5"
+              placeholder="2.5"
+            />
           </UFormField>
+        </div>
 
-          <div class="grid grid-cols-2 gap-4">
-            <UFormField name="price" label="Price ($)" required>
-              <UInput v-model.number="editService.price" type="number" step="0.01" placeholder="99.99" />
-            </UFormField>
+        <UFormField name="categories" label="Categories">
+          <UInput v-model="editService.categories" placeholder="Cleaning, Maintenance, Repair (comma-separated)" />
+        </UFormField>
 
-            <UFormField name="duration_service_h" label="Duration (hours)">
-              <UInput v-model.number="editService.duration_hours" type="number" step="0.5" placeholder="2.5" />
-            </UFormField>
-          </div>
-
-          <UFormField name="categories" label="Categories">
-            <UInput v-model="editService.categories" placeholder="Cleaning, Maintenance, Repair (comma-separated)" />
-          </UFormField>
-
-          <div class="flex gap-2 justify-end">
-            <UButton type="button" variant="outline" @click="showEditModal = false">
-              Cancel
-            </UButton>
-            <UButton type="submit" :loading="loading">
-              Update Service
-            </UButton>
-          </div>
-        </UForm>
-      </UCard>
-    </div>
+        <div class="flex gap-2 justify-end">
+          <UButton type="button" variant="outline" @click="showEditModal = false">
+            Cancel
+          </UButton>
+          <UButton type="submit" :loading="loading">
+            Update Service
+          </UButton>
+        </div>
+      </UForm>
+    </UCard>
   </div>
 </template>

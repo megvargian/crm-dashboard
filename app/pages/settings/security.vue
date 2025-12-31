@@ -6,7 +6,7 @@ const supabase = useSupabaseClient()
 const toast = useToast()
 
 const passwordSchema = z.object({
-  current: z.string().min(7, 'Must be at least 8 characters'),
+  current: z.string().min(8, 'Must be at least 8 characters'),
   new: z.string().min(8, 'Must be at least 8 characters'),
   confirm: z.string().min(8, 'Must be at least 8 characters')
 })

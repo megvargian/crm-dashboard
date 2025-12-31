@@ -24,31 +24,10 @@ const baseLinks = [[{
   to: '/settings',
   exact: true
 }, {
-  label: 'Calendar',
-  icon: 'i-lucide-calendar',
-  to: '/settings/calendar'
-}, {
-  label: 'Services',
-  icon: 'i-lucide-wrench',
-  to: '/settings/services'
-}, {
-  label: 'Employees',
-  icon: 'i-lucide-users',
-  to: '/settings/employees'
-}, {
-  label: 'Notifications',
-  icon: 'i-lucide-bell',
-  to: '/settings/notifications'
-}, {
   label: 'Security',
   icon: 'i-lucide-shield',
   to: '/settings/security'
-}], [{
-  label: 'Documentation',
-  icon: 'i-lucide-book-open',
-  to: 'https://ui.nuxt.com/docs/getting-started/installation/nuxt',
-  target: '_blank'
-}]]
+}],]
 
 // Filter navigation based on user role and type
 const links = computed(() => {

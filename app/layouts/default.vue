@@ -17,10 +17,23 @@ const baseLinks = [[{
     open.value = false
   }
 }, {
-  label: 'Inbox',
-  icon: 'i-lucide-inbox',
-  to: '/inbox',
-  badge: '4',
+  label: 'Stats',
+  icon: 'i-lucide-bar-chart-2',
+  to: '/stats',
+  onSelect: () => {
+    open.value = false
+  }
+}, {
+  label: 'Services',
+  icon: 'i-lucide-wrench',
+  to: '/services',
+  onSelect: () => {
+    open.value = false
+  }
+}, {
+  label: 'Employees',
+  icon: 'i-lucide-user-check',
+  to: '/employees',
   onSelect: () => {
     open.value = false
   }
@@ -45,63 +58,25 @@ const baseLinks = [[{
       open.value = false
     }
   }, {
-    label: 'Services',
-    to: '/settings/services',
-    onSelect: () => {
-      open.value = false
-    }
-  }, {
-    label: 'Employees',
-    to: '/settings/employees',
-    onSelect: () => {
-      open.value = false
-    }
-  }, {
-    label: 'Notifications',
-    to: '/settings/notifications',
-    onSelect: () => {
-      open.value = false
-    }
-  }, {
     label: 'Security',
     to: '/settings/security',
     onSelect: () => {
       open.value = false
     }
   }]
-}], [{
-  label: 'Feedback',
-  icon: 'i-lucide-message-circle',
-  to: 'https://github.com/nuxt-ui-templates/dashboard',
-  target: '_blank'
-}, {
-  label: 'Help & Support',
-  icon: 'i-lucide-info',
-  to: 'https://github.com/nuxt-ui-templates/dashboard',
-  target: '_blank'
 }]]
 
 // Filter navigation based on user role and type
 const links = computed(() => {
   return baseLinks.map(group =>
-    group.map((link) => {
-      if (link.label === 'Settings' && link.children) {
-        // Filter out Services and Employees from Settings submenu for non-admin clients
-        const filteredChildren = link.children.filter(child => {
-          if (child.label === 'Services' || child.label === 'Employees') {
-            const isAdminClient = userStore.clientProfile?.role === 'admin'
-              && userStore.clientProfile?.user_type === 'client'
-            return isAdminClient
-          }
-          return true
-        })
-
-        return {
-          ...link,
-          children: filteredChildren
-        }
+    group.filter((link) => {
+      // Filter Services and Employees for admin clients only
+      if (link.label === 'Services' || link.label === 'Employees') {
+        const isAdminClient = userStore.clientProfile?.role === 'admin'
+          && userStore.clientProfile?.user_type === 'client'
+        return isAdminClient
       }
-      return link
+      return true
     })
   )
 }) satisfies ComputedRef<NavigationMenuItem[][]>
