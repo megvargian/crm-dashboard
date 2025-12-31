@@ -4,10 +4,18 @@ import { useUserStore } from '~/stores/user'
 
 const userStore = useUserStore()
 
+// Ensure profile is loaded when accessing settings
+onMounted(async () => {
+  if (!userStore.isProfileLoaded()) {
+    console.log('Profile not loaded in settings, fetching...')
+    await userStore.fetchClientProfile()
+  }
+})
+
 // Watch for profile changes
 watch(() => userStore.clientProfile, (newProfile) => {
-  console.log('Profile changed:', newProfile)
-}, { immediate: true })
+  console.log('Profile changed in settings:', newProfile)
+}, { immediate: true, deep: true })
 
 // Base navigation items
 const baseLinks = [[{

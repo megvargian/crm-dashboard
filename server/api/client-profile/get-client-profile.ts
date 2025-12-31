@@ -7,16 +7,16 @@ export default eventHandler(async (event) => {
     const config = useRuntimeConfig()
 
     // Try multiple ways to get the configuration for better Netlify compatibility
-    const supabaseUrl = config.supabaseUrl ||
-                       config.public?.supabaseUrl ||
-                       process.env.SUPABASE_URL ||
-                       process.env.NUXT_SUPABASE_URL
+    const supabaseUrl = config.supabaseUrl
+      || config.public?.supabaseUrl
+      || process.env.SUPABASE_URL
+      || process.env.NUXT_SUPABASE_URL
 
-    const supabaseServiceKey = config.supabaseServiceKey ||
-                              config.supabase?.serviceKey ||
-                              process.env.SUPABASE_SECRET_KEY ||
-                              process.env.SUPABASE_SERVICE_ROLE_KEY ||
-                              process.env.NUXT_SUPABASE_SERVICE_KEY
+    const supabaseServiceKey = config.supabaseServiceKey
+      || config.supabase?.serviceKey
+      || process.env.SUPABASE_SECRET_KEY
+      || process.env.SUPABASE_SERVICE_ROLE_KEY
+      || process.env.NUXT_SUPABASE_SERVICE_KEY
 
     console.log('Supabase URL exists:', !!supabaseUrl)
     console.log('Supabase Service Key exists:', !!supabaseServiceKey)

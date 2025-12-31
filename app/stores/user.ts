@@ -34,8 +34,17 @@ export const useUserStore = defineStore('user', {
       this.user = {} as ClientProfile | null
       this.clientProfile = null
     },
-    async fetchClientProfile() {
+    isProfileLoaded() {
+      return this.clientProfile && this.clientProfile.id
+    },
+    async fetchClientProfile(forceRefresh = false) {
       const supabase = useSupabaseClient()
+
+      // Skip if already loaded and not forcing refresh
+      if (!forceRefresh && this.isProfileLoaded()) {
+        console.log('Profile already loaded, skipping fetch')
+        return this.clientProfile
+      }
 
       try {
         // Get current session
@@ -43,8 +52,10 @@ export const useUserStore = defineStore('user', {
 
         if (!session) {
           console.log('No active session')
-          return
+          return null
         }
+
+        console.log('Fetching client profile from API...')
 
         // Call the get-client-profile API
         const response = await fetch('/api/client-profile/get-client-profile', {
@@ -56,6 +67,7 @@ export const useUserStore = defineStore('user', {
 
         if (!response.ok) {
           const errorData = await response.json()
+          console.error('Profile fetch failed:', errorData)
           throw new Error(errorData.statusMessage || 'Failed to fetch client profile')
         }
 
@@ -63,10 +75,15 @@ export const useUserStore = defineStore('user', {
 
         if (result.profile) {
           this.setClientProfile(result.profile)
-          console.log('Client profile loaded:', result.profile)
+          console.log('Client profile loaded successfully:', result.profile)
+          return result.profile
+        } else {
+          console.warn('No profile data in response')
+          return null
         }
       } catch (error) {
         console.error('Failed to fetch client profile:', error)
+        return null
       }
     }
   }
