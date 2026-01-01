@@ -12,6 +12,16 @@ export interface User {
   location: string
 }
 
+export interface Customer {
+  id: string
+  created_at: string
+  full_name: string
+  phone_number?: string
+  email: string
+  gender?: string
+  date_of_birth?: string
+}
+
 export interface Mail {
   id: number
   unread?: boolean

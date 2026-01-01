@@ -1,200 +1,295 @@
+<!-- eslint-disable @typescript-eslint/no-unused-vars -->
 <script setup lang="ts">
-import type { TableColumn } from '@nuxt/ui'
-import { upperFirst } from 'scule'
-import { getPaginationRowModel } from '@tanstack/table-core'
-import type { Row } from '@tanstack/table-core'
-import type { User } from '~/types'
+import type { Customer } from '~/types'
+import { useUserStore } from '~/stores/user'
+import { z } from 'zod'
 
-const UAvatar = resolveComponent('UAvatar')
-const UButton = resolveComponent('UButton')
-const UBadge = resolveComponent('UBadge')
-const UDropdownMenu = resolveComponent('UDropdownMenu')
-const UCheckbox = resolveComponent('UCheckbox')
-
+const userStore = useUserStore()
+const supabase = useSupabaseClient()
 const toast = useToast()
-const table = useTemplateRef('table')
 
-const columnFilters = ref([{
-  id: 'email',
-  value: ''
-}])
-const columnVisibility = ref()
-const rowSelection = ref({ 1: true })
-
-const { data, status } = await useFetch<User[]>('/api/customers', {
-  lazy: true
+// Customer validation schema
+const customerSchema = z.object({
+  full_name: z.string().min(2, 'Full name must be at least 2 characters'),
+  email: z.string().email('Invalid email address'),
+  phone_number: z.string().optional(),
+  gender: z.string().optional(),
+  date_of_birth: z.string().optional()
 })
 
-function getRowItems(row: Row<User>) {
-  return [
-    {
-      type: 'label',
-      label: 'Actions'
-    },
-    {
-      label: 'Copy customer ID',
-      icon: 'i-lucide-copy',
-      onSelect() {
-        navigator.clipboard.writeText(row.original.id.toString())
-        toast.add({
-          title: 'Copied to clipboard',
-          description: 'Customer ID copied to clipboard'
-        })
-      }
-    },
-    {
-      type: 'separator'
-    },
-    {
-      label: 'View customer details',
-      icon: 'i-lucide-list'
-    },
-    {
-      label: 'View customer payments',
-      icon: 'i-lucide-wallet'
-    },
-    {
-      type: 'separator'
-    },
-    {
-      label: 'Delete customer',
-      icon: 'i-lucide-trash',
-      color: 'error',
-      onSelect() {
-        toast.add({
-          title: 'Customer deleted',
-          description: 'The customer has been deleted.'
-        })
-      }
-    }
-  ]
+// Wait for user store to initialize
+await userStore.fetchClientProfile()
+
+// Check if user is admin or employee
+if (userStore.clientProfile?.role !== 'admin' && userStore.clientProfile?.role !== 'employee') {
+  throw createError({
+    statusCode: 403,
+    statusMessage: 'Admin or employee access required'
+  })
 }
 
-const columns: TableColumn<User>[] = [
-  {
-    id: 'select',
-    header: ({ table }) =>
-      h(UCheckbox, {
-        'modelValue': table.getIsSomePageRowsSelected()
-          ? 'indeterminate'
-          : table.getIsAllPageRowsSelected(),
-        'onUpdate:modelValue': (value: boolean | 'indeterminate') =>
-          table.toggleAllPageRowsSelected(!!value),
-        'ariaLabel': 'Select all'
-      }),
-    cell: ({ row }) =>
-      h(UCheckbox, {
-        'modelValue': row.getIsSelected(),
-        'onUpdate:modelValue': (value: boolean | 'indeterminate') => row.toggleSelected(!!value),
-        'ariaLabel': 'Select row'
-      })
-  },
-  {
-    accessorKey: 'id',
-    header: 'ID'
-  },
-  {
-    accessorKey: 'name',
-    header: 'Name',
-    cell: ({ row }) => {
-      return h('div', { class: 'flex items-center gap-3' }, [
-        h(UAvatar, {
-          ...row.original.avatar,
-          size: 'lg'
-        }),
-        h('div', undefined, [
-          h('p', { class: 'font-medium text-highlighted' }, row.original.name),
-          h('p', { class: '' }, `@${row.original.name}`)
-        ])
-      ])
-    }
-  },
-  {
-    accessorKey: 'email',
-    header: ({ column }) => {
-      const isSorted = column.getIsSorted()
+// Data fetching with authorization
+const { data: { session } } = await supabase.auth.getSession()
+const authHeaders = session ? { 'Authorization': `Bearer ${session.access_token}` } : {}
 
-      return h(UButton, {
-        color: 'neutral',
-        variant: 'ghost',
-        label: 'Email',
-        icon: isSorted
-          ? isSorted === 'asc'
-            ? 'i-lucide-arrow-up-narrow-wide'
-            : 'i-lucide-arrow-down-wide-narrow'
-          : 'i-lucide-arrow-up-down',
-        class: '-mx-2.5',
-        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc')
-      })
-    }
-  },
-  {
-    accessorKey: 'location',
-    header: 'Location',
-    cell: ({ row }) => row.original.location
-  },
-  {
-    accessorKey: 'status',
-    header: 'Status',
-    filterFn: 'equals',
-    cell: ({ row }) => {
-      const color = {
-        subscribed: 'success' as const,
-        unsubscribed: 'error' as const,
-        bounced: 'warning' as const
-      }[row.original.status]
+// Initialize customers data
+const customers = ref<Customer[]>([])
 
-      return h(UBadge, { class: 'capitalize', variant: 'subtle', color }, () =>
-        row.original.status
-      )
+// Refresh function
+async function refreshCustomers() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error('No active session')
+
+    const response = await fetch('/api/customers', {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      }
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch customers')
     }
-  },
-  {
-    id: 'actions',
-    cell: ({ row }) => {
-      return h(
-        'div',
-        { class: 'text-right' },
-        h(
-          UDropdownMenu,
-          {
-            content: {
-              align: 'end'
-            },
-            items: getRowItems(row)
-          },
-          () =>
-            h(UButton, {
-              icon: 'i-lucide-ellipsis-vertical',
-              color: 'neutral',
-              variant: 'ghost',
-              class: 'ml-auto'
-            })
-        )
-      )
-    }
+
+    const data = await response.json()
+    customers.value = data as Customer[]
+  } catch (error) {
+    console.error('Error refreshing customers:', error)
   }
+}
+
+// Initial fetch
+await refreshCustomers()
+
+// Search and filters
+const searchQuery = ref('')
+const genderFilter = ref('all')
+
+// Modal states
+const showAddModal = ref(false)
+const showEditModal = ref(false)
+const showDeleteModal = ref(false)
+
+// Loading state
+const loading = ref(false)
+
+// Customer refs
+const editingCustomer = ref<Customer | null>(null)
+const customerToDelete = ref<Customer | null>(null)
+
+// Form data
+const newCustomer = ref({
+  full_name: '',
+  email: '',
+  phone_number: '',
+  gender: '',
+  date_of_birth: ''
+})
+
+const editCustomer = ref({
+  full_name: '',
+  email: '',
+  phone_number: '',
+  gender: '',
+  date_of_birth: ''
+})
+
+// Computed
+const filteredCustomers = computed(() => {
+  let filtered = customers.value
+
+  // Apply search filter
+  if (searchQuery.value) {
+    const searchTerm = searchQuery.value.toLowerCase()
+    filtered = filtered.filter(customer =>
+      customer.full_name?.toLowerCase().includes(searchTerm)
+      || customer.email?.toLowerCase().includes(searchTerm)
+      || customer.phone_number?.toLowerCase().includes(searchTerm)
+    )
+  }
+
+  // Apply gender filter
+  if (genderFilter.value !== 'all') {
+    filtered = filtered.filter(customer => customer.gender === genderFilter.value)
+  }
+
+  return filtered
+})
+
+const genderOptions = [
+  { label: 'Male', value: 'male' },
+  { label: 'Female', value: 'female' },
+  { label: 'Other', value: 'other' }
 ]
 
-const statusFilter = ref('all')
+// CRUD Operations
+async function addCustomer() {
+  loading.value = true
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error('No active session')
 
-watch(() => statusFilter.value, (newVal) => {
-  if (!table?.value?.tableApi) return
+    const response = await fetch('/api/customers', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({
+        ...newCustomer.value,
+        date_of_birth: newCustomer.value.date_of_birth || null,
+        gender: newCustomer.value.gender || null,
+        phone_number: newCustomer.value.phone_number || null
+      })
+    })
 
-  const statusColumn = table.value.tableApi.getColumn('status')
-  if (!statusColumn) return
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.statusMessage || 'Failed to add customer')
+    }
 
-  if (newVal === 'all') {
-    statusColumn.setFilterValue(undefined)
-  } else {
-    statusColumn.setFilterValue(newVal)
+    toast.add({
+      title: 'Success',
+      description: 'Customer added successfully',
+      color: 'success'
+    })
+
+    showAddModal.value = false
+    resetNewCustomerForm()
+    await refreshCustomers()
+  } catch (error: any) {
+    console.error('Error adding customer:', error)
+    toast.add({
+      title: 'Error',
+      description: error.message || 'Failed to add customer',
+      color: 'error'
+    })
+  } finally {
+    loading.value = false
   }
-})
+}
 
-const pagination = ref({
-  pageIndex: 0,
-  pageSize: 10
-})
+function openEditModal(customer: Customer) {
+  editingCustomer.value = customer
+  editCustomer.value = {
+    full_name: customer.full_name || '',
+    email: customer.email || '',
+    phone_number: customer.phone_number || '',
+    gender: customer.gender || '',
+    date_of_birth: customer.date_of_birth || ''
+  }
+  showEditModal.value = true
+}
+
+async function updateCustomer() {
+  if (!editingCustomer.value) return
+
+  loading.value = true
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error('No active session')
+
+    const response = await fetch(`/api/customers?id=${editingCustomer.value.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({
+        ...editCustomer.value,
+        date_of_birth: editCustomer.value.date_of_birth || null,
+        gender: editCustomer.value.gender || null,
+        phone_number: editCustomer.value.phone_number || null
+      })
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.statusMessage || 'Failed to update customer')
+    }
+
+    toast.add({
+      title: 'Success',
+      description: 'Customer updated successfully',
+      color: 'success'
+    })
+
+    showEditModal.value = false
+    editingCustomer.value = null
+    await refreshCustomers()
+  } catch (error: any) {
+    console.error('Error updating customer:', error)
+    toast.add({
+      title: 'Error',
+      description: error.message || 'Failed to update customer',
+      color: 'error'
+    })
+  } finally {
+    loading.value = false
+  }
+}
+
+function openDeleteModal(customer: Customer) {
+  customerToDelete.value = customer
+  showDeleteModal.value = true
+}
+
+async function deleteCustomer() {
+  if (!customerToDelete.value) return
+
+  loading.value = true
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+   if (!session) throw new Error('No active session')
+
+    const response = await fetch(`/api/customers?id=${customerToDelete.value.id}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`
+      }
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.statusMessage || 'Failed to delete customer')
+    }
+
+    toast.add({
+      title: 'Success',
+      description: 'Customer deleted successfully',
+      color: 'success'
+    })
+
+    showDeleteModal.value = false
+    customerToDelete.value = null
+    await refreshCustomers()
+  } catch (error: any) {
+    console.error('Error deleting customer:', error)
+    toast.add({
+      title: 'Error',
+      description: error.message || 'Failed to delete customer',
+      color: 'error'
+    })
+  } finally {
+    loading.value = false
+  }
+}
+
+// Helper functions
+function resetNewCustomerForm() {
+  newCustomer.value = {
+    full_name: '',
+    email: '',
+    phone_number: '',
+    gender: '',
+    date_of_birth: ''
+  }
+}
+
+function formatDate(dateString: string | undefined) {
+  if (!dateString) return 'Not provided'
+  return new Date(dateString).toLocaleDateString()
+}
 </script>
 
 <template>
@@ -204,119 +299,307 @@ const pagination = ref({
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>
-
         <template #right>
-          <CustomersAddModal />
+          <UButton
+            icon="i-lucide-plus"
+            color="primary"
+            label="Add Customer"
+            @click="showAddModal = true"
+          />
         </template>
       </UDashboardNavbar>
     </template>
 
     <template #body>
-      <div class="flex flex-wrap items-center justify-between gap-1.5">
+      <div class="flex flex-wrap items-center justify-between gap-1.5 mb-4">
         <UInput
-          :model-value="(table?.tableApi?.getColumn('email')?.getFilterValue() as string)"
+          v-model="searchQuery"
           class="max-w-sm"
           icon="i-lucide-search"
-          placeholder="Filter emails..."
-          @update:model-value="table?.tableApi?.getColumn('email')?.setFilterValue($event)"
+          placeholder="Search customers..."
         />
-
-        <div class="flex flex-wrap items-center gap-1.5">
-          <CustomersDeleteModal :count="table?.tableApi?.getFilteredSelectedRowModel().rows.length">
-            <UButton
-              v-if="table?.tableApi?.getFilteredSelectedRowModel().rows.length"
-              label="Delete"
-              color="error"
-              variant="subtle"
-              icon="i-lucide-trash"
-            >
-              <template #trailing>
-                <UKbd>
-                  {{ table?.tableApi?.getFilteredSelectedRowModel().rows.length }}
-                </UKbd>
-              </template>
-            </UButton>
-          </CustomersDeleteModal>
-
-          <USelect
-            v-model="statusFilter"
-            :items="[
-              { label: 'All', value: 'all' },
-              { label: 'Subscribed', value: 'subscribed' },
-              { label: 'Unsubscribed', value: 'unsubscribed' },
-              { label: 'Bounced', value: 'bounced' }
-            ]"
-            :ui="{ trailingIcon: 'group-data-[state=open]:rotate-180 transition-transform duration-200' }"
-            placeholder="Filter status"
-            class="min-w-28"
-          />
-          <UDropdownMenu
-            :items="
-              table?.tableApi
-                ?.getAllColumns()
-                .filter((column: any) => column.getCanHide())
-                .map((column: any) => ({
-                  label: upperFirst(column.id),
-                  type: 'checkbox' as const,
-                  checked: column.getIsVisible(),
-                  onUpdateChecked(checked: boolean) {
-                    table?.tableApi?.getColumn(column.id)?.toggleVisibility(!!checked)
-                  },
-                  onSelect(e?: Event) {
-                    e?.preventDefault()
-                  }
-                }))
-            "
-            :content="{ align: 'end' }"
+        <div class="flex items-center gap-1.5">
+          <select
+            v-model="genderFilter"
+            class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-sm"
           >
-            <UButton
-              label="Display"
-              color="neutral"
-              variant="outline"
-              trailing-icon="i-lucide-settings-2"
-            />
-          </UDropdownMenu>
+            <option value="all">All Genders</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+          </select>
         </div>
       </div>
 
-      <UTable
-        ref="table"
-        v-model:column-filters="columnFilters"
-        v-model:column-visibility="columnVisibility"
-        v-model:row-selection="rowSelection"
-        v-model:pagination="pagination"
-        :pagination-options="{
-          getPaginationRowModel: getPaginationRowModel()
-        }"
-        class="shrink-0"
-        :data="data"
-        :columns="columns"
-        :loading="status === 'pending'"
-        :ui="{
-          base: 'table-fixed border-separate border-spacing-0',
-          thead: '[&>tr]:bg-elevated/50 [&>tr]:after:content-none',
-          tbody: '[&>tr]:last:[&>td]:border-b-0',
-          th: 'py-2 first:rounded-l-lg last:rounded-r-lg border-y border-default first:border-l last:border-r',
-          td: 'border-b border-default',
-          separator: 'h-0'
-        }"
-      />
+      <div v-if="loading" class="text-center py-8">
+        Loading customers...
+      </div>
 
-      <div class="flex items-center justify-between gap-3 border-t border-default pt-4 mt-auto">
-        <div class="text-sm text-muted">
-          {{ table?.tableApi?.getFilteredSelectedRowModel().rows.length || 0 }} of
-          {{ table?.tableApi?.getFilteredRowModel().rows.length || 0 }} row(s) selected.
-        </div>
+      <div v-else-if="filteredCustomers.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
+        No customers found.
+      </div>
 
-        <div class="flex items-center gap-1.5">
-          <UPagination
-            :default-page="(table?.tableApi?.getState().pagination.pageIndex || 0) + 1"
-            :items-per-page="table?.tableApi?.getState().pagination.pageSize"
-            :total="table?.tableApi?.getFilteredRowModel().rows.length"
-            @update:page="(p: number) => table?.tableApi?.setPageIndex(p - 1)"
-          />
-        </div>
+      <div v-else class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead class="bg-gray-50 dark:bg-gray-800">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Full Name
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Email
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Phone
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Gender
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Date of Birth
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Created
+              </th>
+              <th class="relative px-6 py-3">
+                <span class="sr-only">Actions</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody class="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+            <tr v-for="customer in filteredCustomers" :key="customer.id" class="hover:bg-gray-50 dark:hover:bg-gray-800">
+              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
+                {{ customer.full_name || 'N/A' }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                {{ customer.email || 'N/A' }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                {{ customer.phone_number || 'N/A' }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                {{ customer.gender || 'N/A' }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                {{ formatDate(customer.date_of_birth) }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                {{ formatDate(customer.created_at) }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <div class="flex items-center gap-2 justify-end">
+                  <UButton
+                    icon="i-lucide-edit"
+                    color="primary"
+                    variant="ghost"
+                    size="sm"
+                    @click="openEditModal(customer)"
+                  />
+                  <UButton
+                    icon="i-lucide-trash-2"
+                    color="error"
+                    variant="ghost"
+                    size="sm"
+                    @click="openDeleteModal(customer)"
+                  />
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </template>
   </UDashboardPanel>
+
+  <!-- Add Customer Modal -->
+  <div v-if="showAddModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" @click.self="showAddModal = false">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+      <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">Add New Customer</h3>
+      <form @submit.prevent="addCustomer">
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Full Name *
+            </label>
+            <UInput
+              v-model="newCustomer.full_name"
+              placeholder="Enter full name"
+              required
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Email
+            </label>
+            <UInput
+              v-model="newCustomer.email"
+              type="email"
+              placeholder="Enter email"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Phone Number
+            </label>
+            <UInput
+              v-model="newCustomer.phone_number"
+              placeholder="Enter phone number"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Gender
+            </label>
+            <select
+              v-model="newCustomer.gender"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-sm"
+            >
+              <option value="">Select gender</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Date of Birth
+            </label>
+            <UInput
+              v-model="newCustomer.date_of_birth"
+              type="date"
+            />
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 mt-6">
+          <UButton
+            type="button"
+            variant="ghost"
+            @click="showAddModal = false"
+          >
+            Cancel
+          </UButton>
+          <UButton
+            type="submit"
+            :loading="loading"
+            :disabled="!newCustomer.full_name"
+          >
+            Add Customer
+          </UButton>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Customer Modal -->
+  <div v-if="showEditModal && editingCustomer" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" @click.self="showEditModal = false">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+      <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">Edit Customer</h3>
+      <form @submit.prevent="updateCustomer">
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Full Name *
+            </label>
+            <UInput
+              v-model="editCustomer.full_name"
+              placeholder="Enter full name"
+              required
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Email
+            </label>
+            <UInput
+              v-model="editCustomer.email"
+              type="email"
+              placeholder="Enter email"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Phone Number
+            </label>
+            <UInput
+              v-model="editCustomer.phone_number"
+              placeholder="Enter phone number"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Gender
+            </label>
+            <select
+              v-model="editCustomer.gender"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-sm"
+            >
+              <option value="">Select gender</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Date of Birth
+            </label>
+            <UInput
+              v-model="editCustomer.date_of_birth"
+              type="date"
+            />
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 mt-6">
+          <UButton
+            type="button"
+            variant="ghost"
+            @click="showEditModal = false"
+          >
+            Cancel
+          </UButton>
+          <UButton
+            type="submit"
+            :loading="loading"
+            :disabled="!editCustomer.full_name"
+          >
+            Update Customer
+          </UButton>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Delete Customer Modal -->
+  <div v-if="showDeleteModal && customerToDelete" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" @click.self="showDeleteModal = false">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+      <h3 class="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">Delete Customer</h3>
+      <p class="text-gray-600 dark:text-gray-400 mb-6">
+        Are you sure you want to delete <strong>{{ customerToDelete.full_name }}</strong>?
+        This action cannot be undone.
+      </p>
+
+      <div class="flex justify-end gap-2">
+        <UButton
+          variant="ghost"
+          @click="showDeleteModal = false"
+        >
+          Cancel
+        </UButton>
+        <UButton
+          color="error"
+          :loading="loading"
+          @click="deleteCustomer"
+        >
+          Delete
+        </UButton>
+      </div>
+    </div>
+  </div>
 </template>

@@ -1,187 +1,185 @@
-import type { User } from '~/types'
+import { createClient } from '@supabase/supabase-js'
+import type { Database } from '~/types/supabase'
+import type { Customer } from '~/types'
 
-const customers: User[] = [{
-  id: 1,
-  name: 'Alex Smith',
-  email: 'alex.smith@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=1'
-  },
-  status: 'subscribed',
-  location: 'New York, USA'
-}, {
-  id: 2,
-  name: 'Jordan Brown',
-  email: 'jordan.brown@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=2'
-  },
-  status: 'unsubscribed',
-  location: 'London, UK'
-}, {
-  id: 3,
-  name: 'Taylor Green',
-  email: 'taylor.green@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=3'
-  },
-  status: 'bounced',
-  location: 'Paris, France'
-}, {
-  id: 4,
-  name: 'Morgan White',
-  email: 'morgan.white@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=4'
-  },
-  status: 'subscribed',
-  location: 'Berlin, Germany'
-}, {
-  id: 5,
-  name: 'Casey Gray',
-  email: 'casey.gray@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=5'
-  },
-  status: 'subscribed',
-  location: 'Tokyo, Japan'
-}, {
-  id: 6,
-  name: 'Jamie Johnson',
-  email: 'jamie.johnson@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=6'
-  },
-  status: 'subscribed',
-  location: 'Sydney, Australia'
-}, {
-  id: 7,
-  name: 'Riley Davis',
-  email: 'riley.davis@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=7'
-  },
-  status: 'subscribed',
-  location: 'New York, USA'
-}, {
-  id: 8,
-  name: 'Kelly Wilson',
-  email: 'kelly.wilson@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=8'
-  },
-  status: 'subscribed',
-  location: 'London, UK'
-}, {
-  id: 9,
-  name: 'Drew Moore',
-  email: 'drew.moore@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=9'
-  },
-  status: 'bounced',
-  location: 'Paris, France'
-}, {
-  id: 10,
-  name: 'Jordan Taylor',
-  email: 'jordan.taylor@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=10'
-  },
-  status: 'subscribed',
-  location: 'Berlin, Germany'
-}, {
-  id: 11,
-  name: 'Morgan Anderson',
-  email: 'morgan.anderson@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=11'
-  },
-  status: 'subscribed',
-  location: 'Tokyo, Japan'
-}, {
-  id: 12,
-  name: 'Casey Thomas',
-  email: 'casey.thomas@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=12'
-  },
-  status: 'unsubscribed',
-  location: 'Sydney, Australia'
-}, {
-  id: 13,
-  name: 'Jamie Jackson',
-  email: 'jamie.jackson@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=13'
-  },
-  status: 'unsubscribed',
-  location: 'New York, USA'
-}, {
-  id: 14,
-  name: 'Riley White',
-  email: 'riley.white@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=14'
-  },
-  status: 'unsubscribed',
-  location: 'London, UK'
-}, {
-  id: 15,
-  name: 'Kelly Harris',
-  email: 'kelly.harris@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=15'
-  },
-  status: 'subscribed',
-  location: 'Paris, France'
-}, {
-  id: 16,
-  name: 'Drew Martin',
-  email: 'drew.martin@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=16'
-  },
-  status: 'subscribed',
-  location: 'Berlin, Germany'
-}, {
-  id: 17,
-  name: 'Alex Thompson',
-  email: 'alex.thompson@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=17'
-  },
-  status: 'unsubscribed',
-  location: 'Tokyo, Japan'
-}, {
-  id: 18,
-  name: 'Jordan Garcia',
-  email: 'jordan.garcia@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=18'
-  },
-  status: 'subscribed',
-  location: 'Sydney, Australia'
-}, {
-  id: 19,
-  name: 'Taylor Rodriguez',
-  email: 'taylor.rodriguez@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=19'
-  },
-  status: 'bounced',
-  location: 'New York, USA'
-}, {
-  id: 20,
-  name: 'Morgan Lopez',
-  email: 'morgan.lopez@example.com',
-  avatar: {
-    src: 'https://i.pravatar.cc/128?u=20'
-  },
-  status: 'subscribed',
-  location: 'London, UK'
-}]
+// Initialize Supabase client with service role key for server-side operations
+const supabase = createClient<Database>(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+export default defineEventHandler(async (event) => {
+  const method = getMethod(event)
+  const query = getQuery(event)
 
-export default eventHandler(async () => {
-  return customers
+  // Get the authorization header
+  const authHeader = getHeader(event, 'authorization')
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    throw createError({
+      statusCode: 401,
+      statusMessage: 'Missing or invalid authorization header'
+    })
+  }
+
+  const token = authHeader.replace('Bearer ', '')
+
+  // Verify the token with Supabase Auth
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+  if (authError || !user) {
+    throw createError({
+      statusCode: 401,
+      statusMessage: 'Invalid or expired token'
+    })
+  }
+
+  try {
+    switch (method) {
+      case 'GET':
+        return await getCustomers()
+
+      case 'POST':
+        const newCustomerData = await readBody(event)
+        return await createCustomer(newCustomerData)
+
+      case 'PUT':
+        const updateData = await readBody(event)
+        const customerId = query.id as string
+        if (!customerId) {
+          throw createError({
+            statusCode: 400,
+            statusMessage: 'Customer ID is required for updates'
+          })
+        }
+        return await updateCustomer(customerId, updateData)
+
+      case 'DELETE':
+        const customerIdToDelete = query.id as string
+        if (!customerIdToDelete) {
+          throw createError({
+            statusCode: 400,
+            statusMessage: 'Customer ID is required for deletion'
+          })
+        }
+        return await deleteCustomer(customerIdToDelete)
+
+      default:
+        throw createError({
+          statusCode: 405,
+          statusMessage: 'Method not allowed'
+        })
+    }
+  } catch (error: any) {
+    console.error('Customers API error:', error)
+    throw createError({
+      statusCode: error.statusCode || 500,
+      statusMessage: error.statusMessage || 'Internal server error'
+    })
+  }
 })
+
+async function getCustomers(): Promise<Customer[]> {
+  const { data, error } = await supabase
+    .from('customer')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    throw createError({
+      statusCode: 500,
+      statusMessage: `Failed to fetch customers: ${error.message}`
+    })
+  }
+
+  return data || []
+}
+
+async function createCustomer(customerData: Partial<Customer>): Promise<Customer> {
+  // Validate required fields
+  if (!customerData.full_name) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Full name is required'
+    })
+  }
+
+  // Prepare data for insertion
+  const insertData = {
+    full_name: customerData.full_name,
+    email: customerData.email || null,
+    phone_number: customerData.phone_number || null,
+    gender: customerData.gender || null,
+    date_of_birth: customerData.date_of_birth || null
+  }
+
+  const { data, error } = await supabase
+    .from('customer')
+    .insert(insertData)
+    .select()
+    .single()
+
+  if (error) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `Failed to create customer: ${error.message}`
+    })
+  }
+
+  return data
+}
+
+async function updateCustomer(customerId: string, customerData: Partial<Customer>): Promise<Customer> {
+  // Validate required fields
+  if (!customerData.full_name) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Full name is required'
+    })
+  }
+
+  // Prepare data for update (exclude id and created_at)
+  const updateData = {
+    full_name: customerData.full_name,
+    email: customerData.email || null,
+    phone_number: customerData.phone_number || null,
+    gender: customerData.gender || null,
+    date_of_birth: customerData.date_of_birth || null
+  }
+
+  const { data, error } = await supabase
+    .from('customer')
+    .update(updateData)
+    .eq('id', customerId)
+    .select()
+    .single()
+
+  if (error) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `Failed to update customer: ${error.message}`
+    })
+  }
+
+  if (!data) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: 'Customer not found'
+    })
+  }
+
+  return data
+}
+
+async function deleteCustomer(customerId: string): Promise<{ message: string }> {
+  const { error } = await supabase
+    .from('customer')
+    .delete()
+    .eq('id', customerId)
+
+  if (error) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `Failed to delete customer: ${error.message}`
+    })
+  }
+
+  return { message: 'Customer deleted successfully' }
+}
