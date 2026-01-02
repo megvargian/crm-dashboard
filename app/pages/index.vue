@@ -45,16 +45,63 @@ const { data: bookings, refresh: refreshBookings } = await useFetch<Booking[]>('
 
 const { data: employees } = await useFetch('/api/employees', {
   default: () => [],
-  headers: authHeaders
+  headers: authHeaders,
+  onResponse: ({ response }) => {
+    console.log('Employees API response:', response._data)
+    console.log('Employees length:', response._data?.length || 0)
+  },
+  onResponseError: ({ error }) => {
+    console.error('Employees API error:', error)
+  }
 })
 const { data: services } = await useFetch('/api/services', {
   default: () => [],
-  headers: authHeaders
+  headers: authHeaders,
+  onResponse: ({ response }) => {
+    console.log('Services API response:', response._data)
+    console.log('Services length:', response._data?.length || 0)
+  },
+  onResponseError: ({ error }) => {
+    console.error('Services API error:', error)
+  }
 })
 const { data: clients } = await useFetch('/api/customers', {
   default: () => [],
-  headers: authHeaders
+  headers: authHeaders,
+  onResponse: ({ response }) => {
+    console.log('Customers API response:', response._data)
+    console.log('Customers length:', response._data?.length || 0)
+    console.log('First customer structure:', response._data?.[0])
+  },
+  onResponseError: ({ error }) => {
+    console.error('Customers API error:', error)
+  }
 })
+
+// Computed options for dropdowns
+const customerOptions = computed(() => {
+  return clients.value?.map(client => ({
+    label: `${client.first_name || ''} ${client.last_name || ''}`.trim() || client.email || 'Unknown Customer',
+    value: client.id
+  })) || []
+})
+
+const employeeOptions = computed(() => {
+  return employees.value?.map(emp => ({
+    label: `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || emp.email || 'Unknown Employee',
+    value: emp.id
+  })) || []
+})
+
+const serviceOptions = computed(() => {
+  return services.value?.map(service => ({
+    label: `${service.name || 'Unknown Service'} - $${service.price || 0}`,
+    value: service.id
+  })) || []
+})
+console.log('Service Options:', serviceOptions.value)
+console.log('Employee Options:', employeeOptions.value)
+console.log('Customer Options:', customerOptions.value)
 
 // Calendar state
 const currentDate = ref(new Date())
@@ -65,9 +112,9 @@ const loading = ref(false)
 const viewMode = ref<'week' | 'month'>('week')
 const editingBooking = ref<Booking | null>(null)
 
-// Form validation
+// Form validation - only customer_id is required from user input
 const bookingSchema = z.object({
-  client_id: z.string().min(1, 'Client is required'),
+  customer_id: z.string().min(1, 'Customer is required'),
   employee_id: z.string().min(1, 'Employee is required'),
   service_id: z.string().min(1, 'Service is required'),
   booking_date: z.string().min(1, 'Date is required'),
@@ -76,7 +123,9 @@ const bookingSchema = z.object({
 })
 
 const newBooking = ref<CreateBookingData>({
-  client_id: '',
+  customer_id: '',
+  client_profile_id: '', // Will be auto-populated by backend
+  client_business_id: null, // Will be auto-populated by backend
   employee_id: '',
   service_id: '',
   booking_date: '',
@@ -119,6 +168,18 @@ const formatTime = (date: Date) => {
   return date.toTimeString().slice(0, 5)
 }
 
+// Extract time from timestamp string
+const extractTimeFromTimestamp = (timestamp: string) => {
+  if (!timestamp) return ''
+  if (timestamp.includes('T')) {
+    // It's a timestamp, extract time
+    const date = new Date(timestamp)
+    return formatTime(date)
+  }
+  // It's already a time string
+  return timestamp
+}
+
 const isToday = (date: Date) => {
   const today = new Date()
   return date.toDateString() === today.toDateString()
@@ -132,8 +193,52 @@ const getBookingsForDay = (date: Date) => {
 const getBookingAtTime = (date: Date, time: string) => {
   const dateStr = formatDate(date)
   return bookings.value.find(booking =>
-    booking.booking_date === dateStr && booking.start_time === time
+    booking.booking_date === dateStr && extractTimeFromTimestamp(booking.start_time) === time
   )
+}
+
+// Get all bookings that overlap with a specific time slot
+const getBookingsOverlappingTime = (date: Date, time: string) => {
+  const dateStr = formatDate(date)
+  const slotTime = new Date(`${dateStr}T${time}:00`)
+
+  return bookings.value.filter(booking => {
+    if (booking.booking_date !== dateStr) return false
+
+    const startTime = new Date(booking.start_time)
+    const endTime = new Date(booking.end_time)
+
+    // Check if this time slot falls within the booking duration
+    return slotTime >= startTime && slotTime < endTime
+  })
+}
+
+// Calculate booking duration in 30-minute slots
+const getBookingDurationSlots = (booking: Booking) => {
+  const startTime = new Date(booking.start_time)
+  const endTime = new Date(booking.end_time)
+  const durationMs = endTime.getTime() - startTime.getTime()
+  return Math.ceil(durationMs / (30 * 60 * 1000)) // 30 minutes per slot
+}
+
+// Check if this is the first slot of a booking
+const isBookingStartSlot = (booking: Booking, time: string) => {
+  const bookingStartTime = extractTimeFromTimestamp(booking.start_time)
+  return bookingStartTime === time
+}
+
+// Get booking display color based on status
+const getBookingColor = (booking: Booking) => {
+  switch (booking.status) {
+    case 'confirmed':
+      return 'bg-green-600 hover:bg-green-700 border-green-500'
+    case 'completed':
+      return 'bg-gray-600 hover:bg-gray-700 border-gray-500'
+    case 'cancelled':
+      return 'bg-red-600 hover:bg-red-700 border-red-500'
+    default: // pending
+      return 'bg-blue-600 hover:bg-blue-700 border-blue-500'
+  }
 }
 
 // Event handlers
@@ -148,7 +253,9 @@ const handleTimeSlotClick = (date: Date, time: string) => {
     selectedDate.value = date
     selectedTimeSlot.value = time
     newBooking.value = {
-      client_id: '',
+      customer_id: '',
+      client_profile_id: '',
+      client_business_id: null,
       employee_id: '',
       service_id: '',
       booking_date: formatDate(date),
@@ -162,11 +269,13 @@ const handleTimeSlotClick = (date: Date, time: string) => {
 const editBooking = (booking: Booking) => {
   editingBooking.value = booking
   newBooking.value = {
-    client_id: booking.client_id,
+    customer_id: booking.customer_id,
+    client_profile_id: booking.client_profile_id,
+    client_business_id: booking.client_business_id || null,
     employee_id: booking.employee_id,
     service_id: booking.service_id,
     booking_date: booking.booking_date,
-    start_time: booking.start_time,
+    start_time: extractTimeFromTimestamp(booking.start_time),
     notes: booking.notes || ''
   }
   showCreateModal.value = true
@@ -182,6 +291,34 @@ const goToToday = () => {
   currentDate.value = new Date()
 }
 
+// Watch for customer ID changes to auto-populate client_profile_id and client_business_id
+watch(() => newBooking.value.customer_id, async (newCustomerId) => {
+  if (newCustomerId) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        const response = await $fetch(`/api/client-profile/get-client-profile?customer_id=${newCustomerId}`, {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`
+          }
+        })
+
+        if (response?.profile) {
+          newBooking.value.client_profile_id = response.profile.id || ''
+          newBooking.value.client_business_id = response.profile.client_business_id || null
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching client profile:', error)
+      newBooking.value.client_profile_id = ''
+      newBooking.value.client_business_id = null
+    }
+  } else {
+    newBooking.value.client_profile_id = ''
+    newBooking.value.client_business_id = null
+  }
+})
+
 // CRUD operations
 const createBooking = async () => {
   try {
@@ -190,7 +327,7 @@ const createBooking = async () => {
     // Validate form data
     const validationResult = bookingSchema.safeParse(newBooking.value)
     if (!validationResult.success) {
-      const errors = validationResult.error.errors.map(err => err.message).join(', ')
+      const errors = validationResult.error.errors?.map(err => err.message).join(', ') || 'Invalid form data'
       toast.add({
         title: 'Validation Error',
         description: errors,
@@ -205,18 +342,30 @@ const createBooking = async () => {
       throw new Error('No active session')
     }
 
+    // Include all booking data including client_profile_id and client_business_id
+    const bookingPayload = {
+      customer_id: newBooking.value.customer_id,
+      client_profile_id: newBooking.value.client_profile_id,
+      client_business_id: newBooking.value.client_business_id,
+      employee_id: newBooking.value.employee_id,
+      service_id: newBooking.value.service_id,
+      booking_date: newBooking.value.booking_date,
+      start_time: newBooking.value.start_time,
+      notes: newBooking.value.notes
+    }
+
     const response = await $fetch('/api/bookings', {
       method: 'POST',
-      body: newBooking.value,
+      body: bookingPayload,
       headers: {
         Authorization: `Bearer ${session.access_token}`
       }
     })
 
-    if (response.success) {
+    if (response) {
       toast.add({
         title: 'Success',
-        description: 'Booking created successfully',
+        description: editingBooking.value ? 'Booking updated successfully' : 'Booking created successfully',
         color: 'green'
       })
       showCreateModal.value = false
@@ -237,7 +386,9 @@ const createBooking = async () => {
 
 const resetForm = () => {
   newBooking.value = {
-    client_id: '',
+    customer_id: '',
+    client_profile_id: '', // Will be auto-populated by backend
+    client_business_id: null, // Will be auto-populated by backend
     employee_id: '',
     service_id: '',
     booking_date: '',
@@ -254,6 +405,45 @@ const closeModal = () => {
   resetForm()
 }
 </script>
+
+<style scoped>
+.calendar-container .booking-grid {
+  position: relative;
+}
+
+.calendar-container .booking-block {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(4px);
+}
+
+.calendar-container .booking-block:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* Smooth transitions for booking interactions */
+.booking-block {
+  transition: all 0.2s ease;
+}
+
+/* Better scroll styling */
+.calendar-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.calendar-container::-webkit-scrollbar-track {
+  background: rgb(17, 24, 39);
+}
+
+.calendar-container::-webkit-scrollbar-thumb {
+  background: rgb(75, 85, 99);
+  border-radius: 4px;
+}
+
+.calendar-container::-webkit-scrollbar-thumb:hover {
+  background: rgb(107, 114, 128);
+}
+</style>
 
 <template>
   <UDashboardPanel id="calendar">
@@ -335,26 +525,59 @@ const closeModal = () => {
               <div
                 v-for="(day, dayIndex) in currentWeekDays"
                 :key="`${day}-${time}`"
-                class="border-r border-gray-700 border-b border-gray-800 min-h-12 p-1 cursor-pointer hover:bg-gray-800 relative transition-colors flex items-center justify-center"
+                class="border-r border-gray-700 border-b border-gray-800 min-h-12 p-1 cursor-pointer hover:bg-gray-800 relative transition-colors"
                 :class="{ 'bg-gray-800/50': isToday(day), 'bg-gray-900': !isToday(day) }"
                 @click.stop="handleTimeSlotClick(day, time)"
               >
-                <!-- Existing Booking -->
+                <!-- Booking Block -->
                 <div
-                  v-if="getBookingAtTime(day, time)"
-                  class="bg-blue-600 hover:bg-blue-700 text-white rounded p-2 text-xs w-full h-full min-h-10 flex flex-col justify-center cursor-pointer transition-colors"
-                  @click.stop="editBooking(getBookingAtTime(day, time)!)"
+                  v-for="booking in getBookingsOverlappingTime(day, time)"
+                  :key="booking.id"
+                  v-show="isBookingStartSlot(booking, time)"
+                  class="absolute inset-x-1 rounded-lg border-l-4 text-white text-xs p-2 cursor-pointer transition-all z-10"
+                  :class="getBookingColor(booking)"
+                  :style="{
+                    height: `${getBookingDurationSlots(booking) * 48 - 4}px`,
+                    minHeight: '44px'
+                  }"
+                  @click.stop="editBooking(booking)"
                 >
-                  <div class="font-medium truncate">
-                    {{ getBookingAtTime(day, time)?.client_profile?.first_name }} {{ getBookingAtTime(day, time)?.client_profile?.last_name }}
-                  </div>
-                  <div class="truncate opacity-90">
-                    {{ getBookingAtTime(day, time)?.service?.name }}
+                  <!-- Booking Content -->
+                  <div class="flex flex-col h-full">
+                    <!-- Time Range -->
+                    <div class="font-medium text-xs mb-1 opacity-90">
+                      {{ extractTimeFromTimestamp(booking.start_time) }} - {{ extractTimeFromTimestamp(booking.end_time) }}
+                    </div>
+
+                    <!-- Customer Name -->
+                    <div class="font-semibold truncate mb-1">
+                      {{ booking.client_profile?.first_name }} {{ booking.client_profile?.last_name }}
+                    </div>
+
+                    <!-- Service Name -->
+                    <div class="truncate opacity-90 text-xs">
+                      {{ booking.service?.name }}
+                    </div>
+
+                    <!-- Employee Name -->
+                    <div class="truncate opacity-75 text-xs mt-1" v-if="booking.employee">
+                      with {{ booking.employee?.first_name }} {{ booking.employee?.last_name }}
+                    </div>
+
+                    <!-- Status Badge -->
+                    <div class="mt-auto pt-1">
+                      <span class="inline-block px-2 py-1 text-xs rounded-full bg-white/20 capitalize">
+                        {{ booking.status }}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
                 <!-- Empty Slot Indicator -->
-                <div v-else class="text-gray-600 text-xs opacity-0 hover:opacity-100 transition-opacity text-center w-full">
+                <div
+                  v-if="getBookingsOverlappingTime(day, time).length === 0"
+                  class="text-gray-600 text-xs opacity-0 hover:opacity-100 transition-opacity text-center w-full h-full flex items-center justify-center"
+                >
                   + Add booking
                 </div>
               </div>
@@ -398,55 +621,61 @@ const closeModal = () => {
             </UFormGroup>
 
             <UFormGroup label="Time" required>
-              <USelect
+              <select
                 v-model="newBooking.start_time"
-                :options="timeSlots.map(time => ({ label: time, value: time }))"
-                placeholder="Select time"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
                 required
-              />
+              >
+                <option value="">Select time</option>
+                <option v-for="time in timeSlots" :key="time" :value="time">
+                  {{ time }}
+                </option>
+              </select>
             </UFormGroup>
 
-            <UFormGroup label="Client" required>
-              <USelect
-                v-model="newBooking.client_id"
-                :options="clients?.map(client => ({
-                  label: `${client.first_name} ${client.last_name}`,
-                  value: client.id
-                })) || []"
-                placeholder="Select client"
+            <UFormGroup label="Customer" required>
+              <select
+                v-model="newBooking.customer_id"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
                 required
-              />
+              >
+                <option value="">Select customer</option>
+                <option v-for="customer in clients" :key="customer.id" :value="customer.id">
+                  {{ customer.full_name || customer.email || 'Unknown Customer' }}
+                </option>
+              </select>
             </UFormGroup>
 
             <UFormGroup label="Employee" required>
-              <USelect
+              <select
                 v-model="newBooking.employee_id"
-                :options="employees?.map(emp => ({
-                  label: `${emp.first_name} ${emp.last_name}`,
-                  value: emp.id
-                })) || []"
-                placeholder="Select employee"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
                 required
-              />
+              >
+                <option value="">Select employee</option>
+                <option v-for="employee in employees" :key="employee.id" :value="employee.id">
+                  {{ `${employee.first_name || ''} ${employee.last_name || ''}`.trim() || employee.email || 'Unknown Employee' }}
+                </option>
+              </select>
             </UFormGroup>
 
             <UFormGroup label="Service" required>
-              <USelect
+              <select
                 v-model="newBooking.service_id"
-                :options="services?.map(service => ({
-                  label: `${service.name} - $${service.price}`,
-                  value: service.id
-                })) || []"
-                placeholder="Select service"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white"
                 required
-              />
+              >
+                <option value="">Select service</option>
+                <option v-for="service in services" :key="service.id" :value="service.id">
+                  {{ `${service.name || 'Unknown Service'} - $${service.price || 0}` }}
+                </option>
+              </select>
             </UFormGroup>
 
             <UFormGroup label="Notes">
               <UTextarea
                 v-model="newBooking.notes"
                 placeholder="Additional notes..."
-                rows="4"
               />
             </UFormGroup>
           </div>

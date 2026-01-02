@@ -1,11 +1,13 @@
 export interface Booking {
   id: string
-  client_id: string
+  client_profile_id: string
+  client_business_id?: string
+  customer_id: string
   employee_id: string
   service_id: string
   booking_date: string // ISO date string
-  start_time: string // HH:mm format
-  end_time: string // HH:mm format
+  start_time: string // ISO timestamp string
+  end_time: string // ISO timestamp string
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
   total_price: number
   notes?: string
@@ -14,6 +16,7 @@ export interface Booking {
 
   // Populated relations
   client_profile?: {
+    id: string
     first_name: string
     last_name: string
     email: string
@@ -31,7 +34,9 @@ export interface Booking {
 }
 
 export interface CreateBookingData {
-  client_id: string
+  customer_id: string
+  client_profile_id: string
+  client_business_id?: string
   employee_id: string
   service_id: string
   booking_date: string

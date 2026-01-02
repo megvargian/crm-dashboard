@@ -2,6 +2,20 @@ import { createClient } from '@supabase/supabase-js'
 import type { Database } from '~/types/supabase'
 import type { Customer } from '~/types'
 
+// Helper function to parse cookies
+function parseCookies(cookieHeader: string) {
+  const cookies: Record<string, string> = {}
+  if (cookieHeader) {
+    cookieHeader.split(';').forEach(cookie => {
+      const [name, value] = cookie.split('=').map(c => c.trim())
+      if (name && value) {
+        cookies[name] = decodeURIComponent(value)
+      }
+    })
+  }
+  return cookies
+}
+
 // Initialize Supabase client with service role key for server-side operations
 const supabase = createClient<Database>(
   process.env.SUPABASE_URL!,
@@ -11,23 +25,48 @@ export default defineEventHandler(async (event) => {
   const method = getMethod(event)
   const query = getQuery(event)
 
-  // Get the authorization header
+  // Try to get token from Authorization header first, then from Supabase cookies
+  let token = null
+  let user = null
+
   const authHeader = getHeader(event, 'authorization')
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw createError({
-      statusCode: 401,
-      statusMessage: 'Missing or invalid authorization header'
-    })
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.replace('Bearer ', '')
+    const { data: userData, error: authError } = await supabase.auth.getUser(token)
+    if (!authError && userData.user) {
+      user = userData.user
+    }
   }
 
-  const token = authHeader.replace('Bearer ', '')
+  // If no valid token from header, try to get session from cookies
+  if (!user) {
+    try {
+      // Get session from cookies using the public supabase client
+      const publicSupabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!)
 
-  // Verify the token with Supabase Auth
-  const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-  if (authError || !user) {
+      // Get cookies from request
+      const cookies = parseCookies(getHeader(event, 'cookie') || '')
+
+      // Check for Supabase session in cookies
+      if (cookies['sb-access-token'] || cookies['supabase.auth.token']) {
+        const sessionToken = cookies['sb-access-token'] || cookies['supabase.auth.token']
+        if (sessionToken) {
+          const { data: userData, error: authError } = await publicSupabase.auth.getUser(sessionToken)
+          if (!authError && userData.user) {
+            user = userData.user
+            token = sessionToken
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to get session from cookies:', error)
+    }
+  }
+
+  if (!user || !token) {
     throw createError({
       statusCode: 401,
-      statusMessage: 'Invalid or expired token'
+      statusMessage: 'Authentication required - please login'
     })
   }
 

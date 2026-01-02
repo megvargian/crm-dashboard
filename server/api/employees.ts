@@ -1,5 +1,19 @@
 import { createClient } from '@supabase/supabase-js'
 
+// Helper function to parse cookies
+function parseCookies(cookieHeader: string) {
+  const cookies: Record<string, string> = {}
+  if (cookieHeader) {
+    cookieHeader.split(';').forEach(cookie => {
+      const [name, value] = cookie.split('=').map(c => c.trim())
+      if (name && value) {
+        cookies[name] = decodeURIComponent(value)
+      }
+    })
+  }
+  return cookies
+}
+
 export default eventHandler(async (event) => {
   try {
     const config = useRuntimeConfig()
@@ -20,24 +34,48 @@ export default eventHandler(async (event) => {
     const method = getMethod(event)
 
     if (method === 'POST') {
-      const authorizationHeader = getHeader(event, 'authorization')
+      // Try to get token from Authorization header first, then from Supabase cookies
+      let token = null
+      let user = null
 
-      if (!authorizationHeader) {
-        throw createError({
-          statusCode: 401,
-          statusMessage: 'Authorization header is required'
-        })
+      const authorizationHeader = getHeader(event, 'authorization')
+      if (authorizationHeader && authorizationHeader.startsWith('Bearer ')) {
+        token = authorizationHeader.replace('Bearer ', '')
+        const { data: userData, error: userError } = await supabase.auth.getUser(token)
+        if (!userError && userData.user) {
+          user = userData.user
+        }
       }
 
-      const token = authorizationHeader.replace('Bearer ', '')
+      // If no valid token from header, try to get session from cookies
+      if (!user) {
+        try {
+          // Get session from cookies using the public supabase client
+          const publicSupabase = createClient(supabaseUrl, process.env.SUPABASE_ANON_KEY!)
 
-      // Verify token and check admin role
-      const { data: { user }, error: userError } = await supabase.auth.getUser(token)
+          // Get cookies from request
+          const cookies = parseCookies(getHeader(event, 'cookie') || '')
 
-      if (userError || !user) {
+          // Check for Supabase session in cookies
+          if (cookies['sb-access-token'] || cookies['supabase.auth.token']) {
+            const sessionToken = cookies['sb-access-token'] || cookies['supabase.auth.token']
+            if (sessionToken) {
+              const { data: userData, error: userError } = await publicSupabase.auth.getUser(sessionToken)
+              if (!userError && userData.user) {
+                user = userData.user
+                token = sessionToken
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Failed to get session from cookies:', error)
+        }
+      }
+
+      if (!user || !token) {
         throw createError({
           statusCode: 401,
-          statusMessage: 'Invalid token'
+          statusMessage: 'Authentication required - please login'
         })
       }
 
