@@ -29,6 +29,9 @@ const createBookingSchema = z.object({
 })
 
 const updateBookingSchema = z.object({
+  customer_id: z.string().uuid('Invalid customer ID').optional(),
+  client_profile_id: z.string().uuid('Invalid client profile ID').optional(),
+  client_business_id: z.string().uuid('Invalid client business ID').nullable().optional(),
   employee_id: z.string().uuid('Invalid employee ID').optional(),
   service_id: z.string().uuid('Invalid service ID').optional(),
   booking_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format').optional(),
@@ -158,11 +161,14 @@ export default eventHandler(async (event) => {
 
     switch (method) {
       case 'GET':
-        // Admin users: return ALL bookings for all employees and customers
+        // Admin users: return ALL bookings for all employees and customers with relations
         const { data: allBookings, error: fetchError } = await supabase
           .from('booking')
           .select(`
-            *
+            *,
+            client_profile(*),
+            employee(*),
+            service(*)
           `)
           .order('booking_date', { ascending: true })
           .order('start_time', { ascending: true })
@@ -268,6 +274,25 @@ export default eventHandler(async (event) => {
 
         const validatedUpdateData = updateBookingSchema.parse(updateBody)
         const finalUpdateData = { ...validatedUpdateData }
+
+        // If customer is being changed, update client_profile_id and client_business_id
+        if (validatedUpdateData.customer_id && !validatedUpdateData.client_profile_id) {
+          const { data: clientProfile, error: clientProfileError } = await supabase
+            .from('client_profile')
+            .select('id, client_business_id')
+            .eq('customer_id', validatedUpdateData.customer_id)
+            .single()
+
+          if (clientProfileError || !clientProfile) {
+            throw createError({
+              statusCode: 400,
+              statusMessage: 'No client profile found for this customer'
+            })
+          }
+
+          finalUpdateData.client_profile_id = clientProfile.id
+          finalUpdateData.client_business_id = clientProfile.client_business_id || null
+        }
 
         // If service is being changed, recalculate end time and price
         if (validatedUpdateData.service_id || validatedUpdateData.start_time || validatedUpdateData.booking_date) {
