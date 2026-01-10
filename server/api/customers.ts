@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js'
-import type { Database } from '~/types/supabase'
 import type { Customer } from '~/types'
 
 // Helper function to parse cookies
@@ -16,14 +15,33 @@ function parseCookies(cookieHeader: string) {
   return cookies
 }
 
-// Initialize Supabase client with service role key for server-side operations
-const supabase = createClient<Database>(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 export default defineEventHandler(async (event) => {
+  const config = useRuntimeConfig()
   const method = getMethod(event)
   const query = getQuery(event)
+
+  // Check if environment variables are available
+  if (!config.public.supabaseUrl && !config.supabaseUrl) {
+    console.error('Missing SUPABASE_URL environment variable')
+    throw createError({
+      statusCode: 500,
+      statusMessage: 'Server configuration error: Missing Supabase URL'
+    })
+  }
+
+  if (!config.supabaseServiceKey && !config.supabase.serviceKey) {
+    console.error('Missing SUPABASE_SERVICE_ROLE_KEY environment variable')
+    throw createError({
+      statusCode: 500,
+      statusMessage: 'Server configuration error: Missing Supabase service key'
+    })
+  }
+
+  // Initialize Supabase client with service role key for server-side operations
+  const supabase = createClient(
+    config.supabaseUrl || config.public.supabaseUrl!,
+    config.supabaseServiceKey || config.supabase.serviceKey!
+  )
 
   // Try to get token from Authorization header first, then from Supabase cookies
   let token = null
@@ -42,7 +60,10 @@ export default defineEventHandler(async (event) => {
   if (!user) {
     try {
       // Get session from cookies using the public supabase client
-      const publicSupabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!)
+      const publicSupabase = createClient(
+        config.public.supabaseUrl!,
+        config.public.supabaseAnonKey!
+      )
 
       // Get cookies from request
       const cookies = parseCookies(getHeader(event, 'cookie') || '')
@@ -73,11 +94,11 @@ export default defineEventHandler(async (event) => {
   try {
     switch (method) {
       case 'GET':
-        return await getCustomers()
+        return await getCustomers(supabase)
 
       case 'POST':
         const newCustomerData = await readBody(event)
-        return await createCustomer(newCustomerData)
+        return await createCustomer(supabase, newCustomerData)
 
       case 'PUT':
         const updateData = await readBody(event)
@@ -88,7 +109,7 @@ export default defineEventHandler(async (event) => {
             statusMessage: 'Customer ID is required for updates'
           })
         }
-        return await updateCustomer(customerId, updateData)
+        return await updateCustomer(supabase, customerId, updateData)
 
       case 'DELETE':
         const customerIdToDelete = query.id as string
@@ -98,7 +119,7 @@ export default defineEventHandler(async (event) => {
             statusMessage: 'Customer ID is required for deletion'
           })
         }
-        return await deleteCustomer(customerIdToDelete)
+        return await deleteCustomer(supabase, customerIdToDelete)
 
       default:
         throw createError({
@@ -115,23 +136,30 @@ export default defineEventHandler(async (event) => {
   }
 })
 
-async function getCustomers(): Promise<Customer[]> {
-  const { data, error } = await supabase
-    .from('customer')
-    .select('*')
-    .order('created_at', { ascending: false })
+async function getCustomers(supabase: any): Promise<Customer[]> {
+  try {
+    const { data, error } = await supabase
+      .from('customer')
+      .select('*')
+      .order('created_at', { ascending: false })
 
-  if (error) {
-    throw createError({
-      statusCode: 500,
-      statusMessage: `Failed to fetch customers: ${error.message}`
-    })
+    if (error) {
+      console.error('Supabase error in getCustomers:', error)
+      throw createError({
+        statusCode: 500,
+        statusMessage: `Failed to fetch customers: ${error.message}`
+      })
+    }
+
+    console.log(`Successfully fetched ${data?.length || 0} customers`)
+    return data || []
+  } catch (error: any) {
+    console.error('Error in getCustomers function:', error)
+    throw error
   }
-
-  return data || []
 }
 
-async function createCustomer(customerData: Partial<Customer>): Promise<Customer> {
+async function createCustomer(supabase: any, customerData: Partial<Customer>): Promise<Customer> {
   // Validate required fields
   if (!customerData.full_name) {
     throw createError({
@@ -165,7 +193,7 @@ async function createCustomer(customerData: Partial<Customer>): Promise<Customer
   return data
 }
 
-async function updateCustomer(customerId: string, customerData: Partial<Customer>): Promise<Customer> {
+async function updateCustomer(supabase: any, customerId: string, customerData: Partial<Customer>): Promise<Customer> {
   // Validate required fields
   if (!customerData.full_name) {
     throw createError({
@@ -207,7 +235,7 @@ async function updateCustomer(customerId: string, customerData: Partial<Customer
   return data
 }
 
-async function deleteCustomer(customerId: string): Promise<{ message: string }> {
+async function deleteCustomer(supabase: any, customerId: string): Promise<{ message: string }> {
   const { error } = await supabase
     .from('customer')
     .delete()
