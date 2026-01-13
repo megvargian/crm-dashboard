@@ -232,8 +232,8 @@ export default eventHandler(async (event) => {
         // Calculate start and end timestamps
         let startTime: Date
         if (/^\d{2}:\d{2}$/.test(validatedData.start_time)) {
-          // HH:MM format - combine with booking date
-          startTime = new Date(`${validatedData.booking_date}T${validatedData.start_time}:00`)
+          // HH:MM format - combine with booking date and treat as UTC to avoid timezone issues
+          startTime = new Date(`${validatedData.booking_date}T${validatedData.start_time}:00.000Z`)
         } else {
           // ISO timestamp format
           startTime = new Date(validatedData.start_time)
@@ -336,8 +336,8 @@ export default eventHandler(async (event) => {
           let startDateTime: Date
           if (validatedUpdateData.start_time) {
             if (/^\d{2}:\d{2}$/.test(validatedUpdateData.start_time)) {
-              // HH:MM format - combine with booking date
-              startDateTime = new Date(`${bookingDate}T${validatedUpdateData.start_time}:00`)
+              // HH:MM format - combine with booking date and treat as UTC
+              startDateTime = new Date(`${bookingDate}T${validatedUpdateData.start_time}:00.000Z`)
               startTimeForCalc = validatedUpdateData.start_time
             } else {
               // ISO timestamp format
@@ -349,10 +349,10 @@ export default eventHandler(async (event) => {
             if (currentBookingQuery.data.start_time.includes('T')) {
               const existingDateTime = new Date(currentBookingQuery.data.start_time)
               startTimeForCalc = existingDateTime.toTimeString().substring(0, 5)
-              startDateTime = new Date(`${bookingDate}T${startTimeForCalc}:00`)
+              startDateTime = new Date(`${bookingDate}T${startTimeForCalc}:00.000Z`)
             } else {
               startTimeForCalc = currentBookingQuery.data.start_time
-              startDateTime = new Date(`${bookingDate}T${startTimeForCalc}:00`)
+              startDateTime = new Date(`${bookingDate}T${startTimeForCalc}:00.000Z`)
             }
           }
 

@@ -183,16 +183,18 @@ const formatDate = (date: Date) => {
 }
 
 const formatTime = (date: Date) => {
-  return date.toTimeString().slice(0, 5)
+  // Use UTC to avoid timezone conversion
+  const hours = date.getUTCHours().toString().padStart(2, '0')
+  const minutes = date.getUTCMinutes().toString().padStart(2, '0')
+  return `${hours}:${minutes}`
 }
 
 // Extract time from timestamp string
 const extractTimeFromTimestamp = (timestamp: string) => {
   if (!timestamp) return ''
   if (timestamp.includes('T')) {
-    // It's a timestamp, extract time
-    const date = new Date(timestamp)
-    return formatTime(date)
+    // It's an ISO timestamp - extract time directly to avoid timezone conversion
+    return timestamp.slice(11, 16) // Extract HH:MM from ISO string
   }
   // It's already a time string
   return timestamp
@@ -229,7 +231,7 @@ watchEffect(() => {
     if (weekBookings.length > 0) {
       weekBookings.forEach((booking, index) => {
         const extractedTime = booking.start_time.includes('T')
-          ? new Date(booking.start_time).toTimeString().slice(0, 5)
+          ? booking.start_time.slice(11, 16)
           : booking.start_time.slice(0, 5)
 
         console.log(`📅 Week Booking ${index + 1}:`, {
@@ -287,8 +289,8 @@ const getBookingAtTime = (date: Date, time: string) => {
     if (booking.start_time) {
       if (booking.start_time.includes('T')) {
         // It's a timestamptz from database like "2026-01-02T10:30:00.000Z"
-        const startDateTime = new Date(booking.start_time)
-        extractedTime = startDateTime.toTimeString().slice(0, 5) // Get HH:MM
+        // Extract time directly from ISO string to avoid timezone conversion
+        extractedTime = booking.start_time.slice(11, 16) // Get HH:MM from ISO string
       } else if (booking.start_time.match(/^\d{2}:\d{2}$/)) {
         // Legacy: It's already in HH:MM format (shouldn't happen with timestamptz)
         extractedTime = booking.start_time
