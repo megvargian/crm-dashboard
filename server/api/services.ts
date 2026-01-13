@@ -119,7 +119,7 @@ export default eventHandler(async (event) => {
           description: body.description,
           price: body.price,
           categories: body.categories,
-          duration_service_in_s: body.duration_service_in_s
+          duration_service_in_s: body.duration_hours ? Math.round(body.duration_hours * 3600) : null // Convert hours to seconds
         })
         .select()
         .single()
@@ -152,7 +152,7 @@ export default eventHandler(async (event) => {
           description: body.description,
           price: body.price,
           categories: body.categories,
-          duration_service_in_s: body.duration_service_in_s
+          duration_service_in_s: body.duration_hours ? Math.round(body.duration_hours * 3600) : null // Convert hours to seconds
         })
         .eq('id', serviceId)
         .select()

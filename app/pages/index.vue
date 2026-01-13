@@ -281,22 +281,21 @@ const getBookingAtTime = (date: Date, time: string) => {
 
     const dateMatches = bookingDate === dateStr
 
-    // Handle time extraction - try multiple strategies
+    // Handle time extraction - now start_time is always timestamptz from database
     let extractedTime = ''
 
     if (booking.start_time) {
       if (booking.start_time.includes('T')) {
-        // It's a proper timestamp like "2026-01-02T10:30:00.000Z"
+        // It's a timestamptz from database like "2026-01-02T10:30:00.000Z"
         const startDateTime = new Date(booking.start_time)
         extractedTime = startDateTime.toTimeString().slice(0, 5) // Get HH:MM
       } else if (booking.start_time.match(/^\d{2}:\d{2}$/)) {
-        // It's already in HH:MM format
+        // Legacy: It's already in HH:MM format (shouldn't happen with timestamptz)
         extractedTime = booking.start_time
-      } else if (booking.start_time.includes('-')) {
-        // Handle corrupted data where start_time contains a date
-        // This is a fallback - we should fix the data source
-        // console.warn(`⚠️ Corrupted start_time data for booking ${booking.id}: ${booking.start_time}`)
-        // For now, default to extracting time from booking_date if possible
+      } else {
+        // Handle any unexpected formats
+        console.warn(`⚠️ Unexpected start_time format for booking ${booking.id}: ${booking.start_time}`)
+        // Try to extract from booking_date as fallback
         if (booking.booking_date && booking.booking_date.includes('T')) {
           const dateTime = new Date(booking.booking_date)
           extractedTime = dateTime.toTimeString().slice(0, 5)
@@ -358,21 +357,25 @@ const getBookingsOverlappingTime = (date: Date, time: string) => {
 
     if (bookingDate !== dateStr) return false
 
-    // Handle start_time and end_time properly
+    // Handle start_time and end_time properly - now always timestamptz from database
     let startTime, endTime
 
     try {
+      // start_time should always be a timestamp now
       if (booking.start_time.includes('T')) {
         startTime = new Date(booking.start_time)
       } else {
+        // Legacy fallback - combine with booking date
         startTime = new Date(`${bookingDate}T${booking.start_time}:00`)
       }
 
+      // end_time should always be a timestamp now
       if (booking.end_time && booking.end_time.includes('T')) {
         endTime = new Date(booking.end_time)
       } else {
-        // If no end_time or invalid format, assume 30 min duration
-        endTime = new Date(startTime.getTime() + (30 * 60 * 1000))
+        // Fallback: calculate end time based on service duration or default 30 min
+        const duration = booking.service?.duration_service_in_s || (30 * 60) // 30 minutes default
+        endTime = new Date(startTime.getTime() + (duration * 1000))
       }
     } catch (error) {
       console.warn('Error parsing booking times:', error)
@@ -384,29 +387,51 @@ const getBookingsOverlappingTime = (date: Date, time: string) => {
   }) || []
 }
 
-// // Calculate booking duration in 30-minute slots
-// const getBookingDurationSlots = (booking: Booking) => {
-//   const startTime = new Date(booking.start_time)
-//   const endTime = new Date(booking.end_time)
-//   const durationMs = endTime.getTime() - startTime.getTime()
-//   return Math.ceil(durationMs / (30 * 60 * 1000)) // 30 minutes per slot
-// }
+// Check if any booking occupies this time slot (for preventing clicks on occupied slots)
+const isTimeSlotOccupied = (date: Date, time: string) => {
+  const overlapping = getBookingsOverlappingTime(date, time)
+  return overlapping.length > 0
+}
 
-// // Check if this is the first slot of a booking
-// const isBookingStartSlot = (booking: Booking, time: string) => {
-//   const bookingStartTime = extractTimeFromTimestamp(booking.start_time)
-//   return bookingStartTime === time
-// }
+// Calculate booking duration in 30-minute slots
+const getBookingDurationSlots = (booking: Booking) => {
+  if (!booking.start_time || !booking.end_time) return 1
+
+  const startTime = new Date(booking.start_time)
+  const endTime = new Date(booking.end_time)
+  const durationMs = endTime.getTime() - startTime.getTime()
+  const durationSlots = Math.ceil(durationMs / (30 * 60 * 1000)) // 30 minutes per slot
+
+  return Math.max(1, durationSlots) // At least 1 slot
+}
+
+// Check if this is the first slot of a booking
+const isBookingStartSlot = (booking: Booking, time: string) => {
+  const bookingStartTime = extractTimeFromTimestamp(booking.start_time)
+  return bookingStartTime === time
+}
 
 // Event handlers
 const handleTimeSlotClick = (date: Date, time: string) => {
+  // Check if this is the start slot of an existing booking
   const existingBooking = getBookingAtTime(date, time)
 
-  console.log(`🖱️ Clicked slot: ${formatDate(date)} ${time}, existing booking:`, existingBooking)
+  // Check if this slot is occupied by any booking (even if it's not the start slot)
+  const isOccupied = isTimeSlotOccupied(date, time)
+
+  console.log(`🖱️ Clicked slot: ${formatDate(date)} ${time}`)
+  console.log(`📍 Existing booking at start:`, existingBooking)
+  console.log(`🚫 Slot occupied:`, isOccupied)
 
   if (existingBooking) {
-    // Edit existing booking
+    // Edit existing booking (this is the start slot)
     editBooking(existingBooking)
+  } else if (isOccupied) {
+    // Find which booking occupies this slot and edit it
+    const overlappingBookings = getBookingsOverlappingTime(date, time)
+    if (overlappingBookings.length > 0) {
+      editBooking(overlappingBookings[0]) // Edit the first overlapping booking
+    }
   } else {
     // Create new booking with immediate preview
     editingBooking.value = null
@@ -557,7 +582,7 @@ const createBooking = async () => {
       employee_id: newBooking.value.employee_id,
       service_id: newBooking.value.service_id,
       booking_date: newBooking.value.booking_date,
-      start_time: newBooking.value.start_time,
+      start_time: newBooking.value.start_time, // This can be HH:MM format, backend will handle conversion
       notes: newBooking.value.notes
     }
 
@@ -755,11 +780,14 @@ const forceRefreshCalendar = async () => {
               >
                 <!-- Existing Bookings -->
                 <div
-                  v-if="getBookingAtTime(day, time)"
+                  v-if="getBookingAtTime(day, time) && isBookingStartSlot(getBookingAtTime(day, time)!, time)"
                   :key="getBookingAtTime(day, time)?.id"
                   class="absolute inset-x-1 rounded-lg text-white text-xs p-2.5 cursor-pointer transition-all duration-300 z-10 outlook-booking-block"
                   :class="getBookingColor(getBookingAtTime(day, time)!)"
-                  style="height: 44px; min-height: 44px;"
+                  :style="{
+                    height: `${getBookingDurationSlots(getBookingAtTime(day, time)!) * 44 + (getBookingDurationSlots(getBookingAtTime(day, time)!) - 1) * 4}px`,
+                    minHeight: '44px'
+                  }"
                   @click.stop="editBooking(getBookingAtTime(day, time)!)"
                 >
                   <!-- Modern Booking Content -->
@@ -767,7 +795,8 @@ const forceRefreshCalendar = async () => {
                     <!-- Time Range with Icon -->
                     <div class="flex items-center text-white font-semibold text-xs mb-2">
                       <div class="w-1.5 h-1.5 bg-white rounded-full mr-2 opacity-90" />
-                      {{ extractTimeFromTimestamp(getBookingAtTime(day, time)!.start_time) }}
+                      {{ extractTimeFromTimestamp(getBookingAtTime(day, time)!.start_time) }} -
+                      {{ extractTimeFromTimestamp(getBookingAtTime(day, time)!.end_time) }}
                     </div>
 
                     <!-- Customer Name -->
@@ -776,9 +805,12 @@ const forceRefreshCalendar = async () => {
                       {{ getBookingAtTime(day, time)!.client_profile?.last_name || '' }}
                     </div>
 
-                    <!-- Service & Employee -->
+                    <!-- Service & Duration -->
                     <div class="text-white/90 text-xs truncate">
                       {{ getBookingAtTime(day, time)!.service?.name || 'Service' }}
+                      <span v-if="getBookingAtTime(day, time)!.service?.duration_service_in_s" class="text-white/70">
+                        ({{ Math.round(getBookingAtTime(day, time)!.service.duration_service_in_s / 3600 * 10) / 10 }}h)
+                      </span>
                     </div>
                     <div v-if="getBookingAtTime(day, time)!.employee" class="text-white/80 text-xs truncate">
                       {{ getBookingAtTime(day, time)!.employee?.first_name }} {{ getBookingAtTime(day, time)!.employee?.last_name }}

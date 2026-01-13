@@ -24,7 +24,10 @@ const createBookingSchema = z.object({
   employee_id: z.string().uuid('Invalid employee ID'),
   service_id: z.string().uuid('Invalid service ID'),
   booking_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
-  start_time: z.string().regex(/^\d{2}:\d{2}$/, 'Time must be in HH:MM format'),
+  start_time: z.string().refine((val) => {
+    // Accept either HH:MM format or ISO timestamp
+    return /^\d{2}:\d{2}$/.test(val) || !isNaN(Date.parse(val))
+  }, 'Time must be in HH:MM format or valid ISO timestamp'),
   notes: z.string().optional()
 })
 
@@ -35,7 +38,10 @@ const updateBookingSchema = z.object({
   employee_id: z.string().uuid('Invalid employee ID').optional(),
   service_id: z.string().uuid('Invalid service ID').optional(),
   booking_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format').optional(),
-  start_time: z.string().regex(/^\d{2}:\d{2}$/, 'Time must be in HH:MM format').optional(),
+  start_time: z.string().refine((val) => {
+    // Accept either HH:MM format or ISO timestamp
+    return /^\d{2}:\d{2}$/.test(val) || !isNaN(Date.parse(val))
+  }, 'Time must be in HH:MM format or valid ISO timestamp').optional(),
   status: z.enum(['pending', 'confirmed', 'completed', 'cancelled']).optional(),
   notes: z.string().optional()
 })
@@ -224,8 +230,21 @@ export default eventHandler(async (event) => {
         }
 
         // Calculate start and end timestamps
-        const startTime = new Date(`${validatedData.booking_date}T${validatedData.start_time}:00`)
+        let startTime: Date
+        if (/^\d{2}:\d{2}$/.test(validatedData.start_time)) {
+          // HH:MM format - combine with booking date
+          startTime = new Date(`${validatedData.booking_date}T${validatedData.start_time}:00`)
+        } else {
+          // ISO timestamp format
+          startTime = new Date(validatedData.start_time)
+        }
+
+        console.log('🔧 Booking calculation debug:')
+        console.log('📅 Start time:', startTime.toISOString())
+        console.log('⏱️  Service duration (seconds):', service.duration_service_in_s)
+
         const endTime = new Date(startTime.getTime() + (service.duration_service_in_s * 1000))
+        console.log('🏁 End time:', endTime.toISOString())
 
         const bookingData = {
           customer_id: validatedData.customer_id,
@@ -314,13 +333,26 @@ export default eventHandler(async (event) => {
 
           // Handle start_time - it might be a timestamp or just time string
           let startTimeForCalc = validatedUpdateData.start_time
-          if (!startTimeForCalc && currentBookingQuery.data.start_time) {
-            // If existing start_time is a timestamp, extract the time part
+          let startDateTime: Date
+          if (validatedUpdateData.start_time) {
+            if (/^\d{2}:\d{2}$/.test(validatedUpdateData.start_time)) {
+              // HH:MM format - combine with booking date
+              startDateTime = new Date(`${bookingDate}T${validatedUpdateData.start_time}:00`)
+              startTimeForCalc = validatedUpdateData.start_time
+            } else {
+              // ISO timestamp format
+              startDateTime = new Date(validatedUpdateData.start_time)
+              startTimeForCalc = startDateTime.toTimeString().substring(0, 5)
+            }
+          } else if (currentBookingQuery.data.start_time) {
+            // Use existing start_time
             if (currentBookingQuery.data.start_time.includes('T')) {
               const existingDateTime = new Date(currentBookingQuery.data.start_time)
               startTimeForCalc = existingDateTime.toTimeString().substring(0, 5)
+              startDateTime = new Date(`${bookingDate}T${startTimeForCalc}:00`)
             } else {
               startTimeForCalc = currentBookingQuery.data.start_time
+              startDateTime = new Date(`${bookingDate}T${startTimeForCalc}:00`)
             }
           }
 
@@ -337,8 +369,12 @@ export default eventHandler(async (event) => {
             })
           }
 
-          const startDateTime = new Date(`${bookingDate}T${startTimeForCalc}:00`)
+          console.log('🔧 Update booking calculation debug:')
+          console.log('📅 Start time for calc:', startDateTime.toISOString())
+          console.log('⏱️  Service duration (seconds):', updatedService.duration_service_in_s)
+
           const endDateTime = new Date(startDateTime.getTime() + (updatedService.duration_service_in_s * 1000))
+          console.log('🏁 End time calculated:', endDateTime.toISOString())
 
           // Update with full timestamps if start_time changed
           if (validatedUpdateData.start_time) {

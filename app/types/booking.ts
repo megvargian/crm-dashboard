@@ -5,9 +5,9 @@ export interface Booking {
   customer_id: string
   employee_id: string
   service_id: string
-  booking_date: string // ISO date string
-  start_time: string // ISO timestamp string
-  end_time: string // ISO timestamp string
+  booking_date: string // ISO date string (YYYY-MM-DD)
+  start_time: string // ISO timestamp string (timestamptz from database)
+  end_time: string // ISO timestamp string (timestamptz from database)
   status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
   total_price: number
   notes?: string
@@ -39,16 +39,16 @@ export interface CreateBookingData {
   client_business_id?: string
   employee_id: string
   service_id: string
-  booking_date: string
-  start_time: string
+  booking_date: string // YYYY-MM-DD format
+  start_time: string // Can be HH:MM format (frontend) or ISO timestamp, backend handles conversion
   notes?: string
 }
 
 export interface UpdateBookingData {
   employee_id?: string
   service_id?: string
-  booking_date?: string
-  start_time?: string
+  booking_date?: string // YYYY-MM-DD format
+  start_time?: string // Can be HH:MM format or ISO timestamp, backend handles conversion
   status?: 'pending' | 'confirmed' | 'completed' | 'cancelled'
   notes?: string
 }

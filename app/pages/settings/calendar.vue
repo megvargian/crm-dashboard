@@ -56,6 +56,18 @@ const newBooking = ref<CreateBookingData>({
 const currentDate = ref(new Date())
 const selectedDate = ref(new Date())
 
+// Helper function to format timestamps for display
+const formatTimeFromTimestamp = (timestamp: string) => {
+  if (!timestamp) return ''
+  if (timestamp.includes('T')) {
+    // It's a timestamptz from database
+    const date = new Date(timestamp)
+    return date.toTimeString().slice(0, 5) // HH:MM format
+  }
+  // Legacy format - just return as is
+  return timestamp
+}
+
 // Calendar computed values
 const currentMonth = computed(() => {
   const month = currentDate.value.getMonth()
@@ -178,13 +190,19 @@ const createBooking = async () => {
       throw new Error('No active session')
     }
 
+    // Create payload with time in HH:MM format (backend will convert to timestamptz)
+    const bookingPayload = {
+      ...newBooking.value,
+      start_time: newBooking.value.start_time // Keep as HH:MM, backend handles conversion
+    }
+
     const response = await fetch('/api/bookings', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session.access_token}`
       },
-      body: JSON.stringify(newBooking.value)
+      body: JSON.stringify(bookingPayload)
     })
 
     if (!response.ok) {
@@ -323,7 +341,7 @@ watch(showCreateModal, (isOpen) => {
               :key="booking.id"
               class="text-xs p-1 rounded bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 truncate"
             >
-              {{ booking.start_time }} - {{ booking.service?.name }}
+              {{ formatTimeFromTimestamp(booking.start_time) }} - {{ booking.service?.name }}
             </div>
             <div
               v-if="bookingsForDate(day.fullDate).length > 3"
@@ -356,7 +374,7 @@ watch(showCreateModal, (isOpen) => {
             <div>
               <h4 class="font-medium">{{ booking.service?.name }}</h4>
               <p class="text-sm text-gray-600 dark:text-gray-400">
-                {{ booking.start_time }} - {{ booking.end_time }}
+                {{ formatTimeFromTimestamp(booking.start_time) }} - {{ formatTimeFromTimestamp(booking.end_time) }}
               </p>
               <p class="text-sm text-gray-600 dark:text-gray-400">
                 Client: {{ booking.client_profile?.first_name }} {{ booking.client_profile?.last_name }}
