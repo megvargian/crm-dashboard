@@ -43,6 +43,13 @@ export default defineEventHandler(async (event) => {
     config.supabaseServiceKey || config.supabase.serviceKey!
   )
 
+  // Allow POST requests without authentication for public booking page
+  if (method === 'POST') {
+    const newCustomerData = await readBody(event)
+    return await createCustomer(supabase, newCustomerData)
+  }
+
+  // For GET, PUT, DELETE - require authentication
   // Try to get token from Authorization header first, then from Supabase cookies
   let token = null
   let user = null
@@ -159,20 +166,20 @@ async function getCustomers(supabase: any): Promise<Customer[]> {
   }
 }
 
-async function createCustomer(supabase: any, customerData: Partial<Customer>): Promise<Customer> {
+async function createCustomer(supabase: any, customerData: any): Promise<any> {
   // Validate required fields
-  if (!customerData.full_name) {
+  if (!customerData.full_name && !(customerData.first_name && customerData.last_name)) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'Full name is required'
+      statusMessage: 'Full name or first/last name is required'
     })
   }
 
-  // Prepare data for insertion
-  const insertData = {
-    full_name: customerData.full_name,
+  // Prepare data for insertion - customer table only has: full_name, email, phone_number, gender, date_of_birth
+  const insertData: any = {
+    full_name: customerData.full_name || `${customerData.first_name} ${customerData.last_name}`,
     email: customerData.email || null,
-    phone_number: customerData.phone_number || null,
+    phone_number: customerData.phone || customerData.phone_number || null,
     gender: customerData.gender || null,
     date_of_birth: customerData.date_of_birth || null
   }
@@ -184,6 +191,7 @@ async function createCustomer(supabase: any, customerData: Partial<Customer>): P
     .single()
 
   if (error) {
+    console.error('Error creating customer:', error)
     throw createError({
       statusCode: 400,
       statusMessage: `Failed to create customer: ${error.message}`

@@ -61,6 +61,35 @@ export default eventHandler(async (event) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
+    const method = getMethod(event)
+
+    // Allow GET requests without authentication for public booking page
+    if (method === 'GET') {
+      const query = getQuery(event)
+      const { data: bookings, error } = await supabase
+        .from('booking')
+        .select(`
+          *,
+          client_profile(*),
+          customer(*),
+          employee(*),
+          service(*)
+        `)
+        .eq('employee_id', query.employee_id || '')
+        .order('booking_date', { ascending: true })
+        .order('start_time', { ascending: true })
+
+      if (error) {
+        throw createError({
+          statusCode: 500,
+          statusMessage: `Failed to fetch bookings: ${error.message}`
+        })
+      }
+
+      return bookings || []
+    }
+
+    // For POST, PUT, DELETE - require authentication
     // Try to get token from Authorization header first, then from Supabase cookies
     let token = null
     let user = null
@@ -105,8 +134,6 @@ export default eventHandler(async (event) => {
         statusMessage: 'Authentication required - please login'
       })
     }
-
-    const method = getMethod(event)
 
     // Check if user is admin (client_profile with admin role)
     const { data: clientProfile } = await supabase
