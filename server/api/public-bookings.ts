@@ -52,6 +52,20 @@ export default defineEventHandler(async (event) => {
   const { customer_id, client_profile_id, employee_id, service_id, booking_date, start_time, notes } = validation.data
 
   try {
+    // Get client_business_id from client_profile
+    const { data: clientProfile, error: clientProfileError } = await supabase
+      .from('client_profile')
+      .select('client_business_id')
+      .eq('id', client_profile_id)
+      .single()
+
+    if (clientProfileError || !clientProfile || !clientProfile.client_business_id) {
+      throw createError({
+        statusCode: 404,
+        statusMessage: 'Client profile not found or has no associated business'
+      })
+    }
+
     // Get service details to calculate end time
     const { data: service, error: serviceError } = await supabase
       .from('service')
@@ -117,6 +131,7 @@ export default defineEventHandler(async (event) => {
       .insert({
         customer_id,
         client_profile_id,
+        client_business_id: clientProfile.client_business_id,
         employee_id,
         service_id,
         booking_date,

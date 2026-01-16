@@ -7,7 +7,8 @@ import StepCustomerInfo from '~/components/booking/StepCustomerInfo.vue'
 
 definePageMeta({
   title: 'Book Appointment',
-  layout: false
+  layout: false,
+  auth: false // Public page - no authentication required
 })
 
 const route = useRoute()

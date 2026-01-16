@@ -66,7 +66,9 @@ export default eventHandler(async (event) => {
     // Allow GET requests without authentication for public booking page
     if (method === 'GET') {
       const query = getQuery(event)
-      const { data: bookings, error } = await supabase
+
+      // Build query conditionally
+      let queryBuilder = supabase
         .from('booking')
         .select(`
           *,
@@ -75,7 +77,13 @@ export default eventHandler(async (event) => {
           employee(*),
           service(*)
         `)
-        .eq('employee_id', query.employee_id || '')
+
+      // Only filter by employee_id if it's provided
+      if (query.employee_id) {
+        queryBuilder = queryBuilder.eq('employee_id', query.employee_id)
+      }
+
+      const { data: bookings, error } = await queryBuilder
         .order('booking_date', { ascending: true })
         .order('start_time', { ascending: true })
 

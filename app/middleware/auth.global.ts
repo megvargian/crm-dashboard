@@ -7,7 +7,10 @@ export default defineNuxtRouteMiddleware(async (to) => {
   const supabase = useSupabaseClient()
 
   // Public routes that don't require authentication
-  const publicRoutes = ['/login', '/forgot-password']
+  const publicRoutes = ['/login', '/forgot-password', '/book']
+
+  // Check if the route path starts with /book/ (dynamic booking pages)
+  const isBookingRoute = to.path.startsWith('/book/')
 
   // If user is authenticated, ensure we have the latest profile
   if (user.value) {
@@ -38,12 +41,12 @@ export default defineNuxtRouteMiddleware(async (to) => {
     }
   }
   // If user is not authenticated and trying to access a protected route
-  if (!user.value && !publicRoutes.includes(to.path)) {
+  if (!user.value && !publicRoutes.includes(to.path) && !isBookingRoute) {
     return navigateTo('/login')
   }
 
-  // If user is authenticated and trying to access auth pages
-  if (user.value && publicRoutes.includes(to.path)) {
+  // If user is authenticated and trying to access auth pages (but allow booking pages)
+  if (user.value && publicRoutes.includes(to.path) && to.path !== '/book' && !isBookingRoute) {
     return navigateTo('/')
   }
 })
