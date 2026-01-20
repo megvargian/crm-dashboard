@@ -6,6 +6,8 @@ const props = defineProps<{
   range: Range
 }>()
 
+const supabase = useSupabaseClient()
+
 function formatCurrency(value: number): string {
   return value.toLocaleString('en-US', {
     style: 'currency',
@@ -14,49 +16,41 @@ function formatCurrency(value: number): string {
   })
 }
 
-const baseStats = [{
-  title: 'Customers',
-  icon: 'i-lucide-users',
-  minValue: 400,
-  maxValue: 1000,
-  minVariation: -15,
-  maxVariation: 25
-}, {
-  title: 'Conversions',
-  icon: 'i-lucide-chart-pie',
-  minValue: 1000,
-  maxValue: 2000,
-  minVariation: -10,
-  maxVariation: 20
-}, {
-  title: 'Revenue',
-  icon: 'i-lucide-circle-dollar-sign',
-  minValue: 200000,
-  maxValue: 500000,
-  minVariation: -20,
-  maxVariation: 30,
-  formatter: formatCurrency
-}, {
-  title: 'Orders',
-  icon: 'i-lucide-shopping-cart',
-  minValue: 100,
-  maxValue: 300,
-  minVariation: -5,
-  maxVariation: 15
-}]
+const { data: stats } = await useAsyncData<Stat[]>('booking-stats', async () => {
+  try {
+    // Get authentication session
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      console.error('No active session for stats')
+      return []
+    }
 
-const { data: stats } = await useAsyncData<Stat[]>('stats', async () => {
-  return baseStats.map((stat) => {
-    const value = randomInt(stat.minValue, stat.maxValue)
-    const variation = randomInt(stat.minVariation, stat.maxVariation)
+    // Format dates for API
+    const startDate = props.range.start.toISOString().split('T')[0]
+    const endDate = props.range.end.toISOString().split('T')[0]
 
-    return {
+    // Fetch booking statistics
+    const response = await $fetch<any[]>('/api/booking-stats', {
+      query: {
+        start_date: startDate,
+        end_date: endDate
+      },
+      headers: {
+        Authorization: `Bearer ${session.access_token}`
+      }
+    })
+
+    // Format the response data
+    return response.map((stat) => ({
       title: stat.title,
       icon: stat.icon,
-      value: stat.formatter ? stat.formatter(value) : value,
-      variation
-    }
-  })
+      value: stat.formatter === 'currency' ? formatCurrency(stat.value) : stat.value,
+      variation: stat.variation
+    }))
+  } catch (error) {
+    console.error('Error fetching booking stats:', error)
+    return []
+  }
 }, {
   watch: [() => props.period, () => props.range],
   default: () => []

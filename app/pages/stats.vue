@@ -5,7 +5,7 @@ import type { Period, Range } from '~/types'
 import { useUserStore } from '~/stores/user'
 
 definePageMeta({
-  title: 'Stats'
+  title: 'Booking Statistics'
 })
 
 const userStore = useUserStore()
@@ -41,9 +41,9 @@ const period = ref<Period>('daily')
 </script>
 
 <template>
-  <UDashboardPanel id="home">
+  <UDashboardPanel id="booking-stats">
     <template #header>
-      <UDashboardNavbar title="Home" :ui="{ right: 'gap-3' }">
+      <UDashboardNavbar title="Booking Statistics" :ui="{ right: 'gap-3' }">
         <template #leading>
           <UDashboardSidebarCollapse />
         </template>

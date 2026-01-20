@@ -21,12 +21,14 @@ const timeSlots = computed(() => {
 
 // Fetch bookings for the selected employee and date
 const { data: existingBookings, refresh: refreshBookings } = await useFetch('/api/bookings', {
+  lazy: true,
+  server: false,
   default: () => [],
   query: computed(() => ({
     employee_id: bookingState.value.selectedEmployee,
     date: selectedDate.value ? formatDate(selectedDate.value) : null
   })),
-  watch: [selectedDate]
+  watch: [selectedDate, () => bookingState.value.selectedEmployee]
 })
 
 const formatDate = (date: Date) => {
@@ -38,18 +40,40 @@ const isTimeSlotAvailable = (time: string) => {
 
   const dateStr = formatDate(selectedDate.value)
 
+  // Convert the time slot to minutes for comparison
+  const [slotHour, slotMinute] = time.split(':').map(Number)
+  const slotTimeInMinutes = slotHour * 60 + slotMinute
+
   return !existingBookings.value.some((booking: any) => {
     const bookingDate = booking.booking_date.split('T')[0]
-    const bookingTime = booking.start_time.includes('T')
+    if (bookingDate !== dateStr) return false
+
+    // Extract start and end times
+    const startTime = booking.start_time.includes('T')
       ? booking.start_time.slice(11, 16)
       : booking.start_time.slice(0, 5)
 
-    return bookingDate === dateStr && bookingTime === time
+    const endTime = booking.end_time.includes('T')
+      ? booking.end_time.slice(11, 16)
+      : booking.end_time.slice(0, 5)
+
+    // Convert start and end times to minutes
+    const [startHour, startMinute] = startTime.split(':').map(Number)
+    const startTimeInMinutes = startHour * 60 + startMinute
+
+    const [endHour, endMinute] = endTime.split(':').map(Number)
+    const endTimeInMinutes = endHour * 60 + endMinute
+
+    // Check if the slot falls within the booking range (inclusive of both start and end)
+    return slotTimeInMinutes >= startTimeInMinutes && slotTimeInMinutes <= endTimeInMinutes
   })
 }
 
 const selectTimeSlot = (time: string) => {
-  if (!selectedDate.value || !isTimeSlotAvailable(time)) return
+  if (!selectedDate.value) return
+
+  // Don't allow selecting unavailable time slots
+  if (!isTimeSlotAvailable(time)) return
 
   bookingState.value.selectedDate = formatDate(selectedDate.value)
   bookingState.value.selectedTime = time
@@ -177,21 +201,34 @@ watch(selectedDate, () => {
           <button
             v-for="time in timeSlots"
             :key="time"
-            class="py-3 px-4 rounded-lg text-sm font-medium transition-all"
+            class="py-3 px-4 rounded-lg text-sm font-medium transition-all relative"
             :class="{
               'bg-blue-500 text-white': isSelected(time),
               'bg-gray-700 text-white hover:bg-gray-600': !isSelected(time) && isTimeSlotAvailable(time),
-              'bg-gray-800 text-gray-600 cursor-not-allowed': !isTimeSlotAvailable(time)
+              'bg-gray-800 text-gray-500 cursor-not-allowed opacity-50': !isTimeSlotAvailable(time)
             }"
             :disabled="!isTimeSlotAvailable(time)"
             @click="selectTimeSlot(time)"
           >
             {{ time }}
+            <span v-if="!isTimeSlotAvailable(time)" class="absolute top-1 right-1 text-xs">🔒</span>
           </button>
         </div>
 
         <div v-else class="text-center py-8 text-gray-400">
           Please select a date to see available time slots
+        </div>
+
+        <!-- Legend -->
+        <div v-if="selectedDate" class="mt-4 flex gap-4 text-xs text-gray-400 justify-center">
+          <div class="flex items-center gap-2">
+            <div class="w-4 h-4 bg-gray-700 rounded"></div>
+            <span>Available</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <div class="w-4 h-4 bg-gray-800 opacity-50 rounded"></div>
+            <span>Booked</span>
+          </div>
         </div>
       </div>
     </div>

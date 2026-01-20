@@ -5,20 +5,13 @@ const { bookingState } = useBookingFlow()
 
 // Fetch employees who can provide the selected services
 const { data: employees, pending } = await useFetch('/api/employees', {
+  lazy: true,
+  server: false,
   default: () => [],
   query: {
     service_ids: computed(() => bookingState.value.selectedServices.join(','))
-  }
-})
-
-// Filter employees who can provide at least one of the selected services
-const availableEmployees = computed(() => {
-  if (!employees.value || bookingState.value.selectedServices.length === 0) {
-    return employees.value || []
-  }
-
-  // For now, show all employees. Later you can filter by employee_services table
-  return employees.value
+  },
+  watch: [() => bookingState.value.selectedServices]
 })
 
 const selectEmployee = (employeeId: string) => {
@@ -36,9 +29,13 @@ const selectEmployee = (employeeId: string) => {
       <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto" />
     </div>
 
+    <div v-else-if="!employees || employees.length === 0" class="text-center py-8">
+      <p class="text-gray-400">No employees available for the selected services.</p>
+    </div>
+
     <div v-else class="employees-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       <div
-        v-for="employee in availableEmployees"
+        v-for="employee in employees"
         :key="employee.id"
         class="employee-card p-6 rounded-lg border-2 transition-all cursor-pointer"
         :class="bookingState.selectedEmployee === employee.id
@@ -66,10 +63,6 @@ const selectEmployee = (employeeId: string) => {
           </div>
         </div>
       </div>
-    </div>
-
-    <div v-if="!pending && availableEmployees.length === 0" class="text-center py-8 text-gray-400">
-      No service providers available for the selected services.
     </div>
   </div>
 </template>

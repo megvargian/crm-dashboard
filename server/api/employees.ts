@@ -171,20 +171,64 @@ export default eventHandler(async (event) => {
       return { success: true, employee }
     } else {
       // GET - Fetch employees
-      const { data: employees, error } = await supabase
-        .from('employee')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const query = getQuery(event)
+      const serviceIds = query.service_ids ? String(query.service_ids).split(',').filter(Boolean) : []
 
-      if (error) {
-        console.error('Supabase error:', error)
-        throw createError({
-          statusCode: 500,
-          statusMessage: 'Failed to fetch employees'
-        })
+      if (serviceIds.length > 0) {
+        // Filter employees who can provide the selected services
+        const { data: employeeServices, error: esError } = await supabase
+          .from('employee_services')
+          .select('employee_id')
+          .in('service_id', serviceIds)
+
+        if (esError) {
+          console.error('Employee services error:', esError)
+          throw createError({
+            statusCode: 500,
+            statusMessage: 'Failed to fetch employee services'
+          })
+        }
+
+        // Get unique employee IDs
+        const employeeIds = [...new Set(employeeServices?.map((es: any) => es.employee_id) || [])]
+
+        if (employeeIds.length === 0) {
+          return [] // No employees provide these services
+        }
+
+        // Fetch employees who provide at least one of the selected services
+        const { data: employees, error } = await supabase
+          .from('employee')
+          .select('*')
+          .in('id', employeeIds)
+          .order('created_at', { ascending: false })
+
+        if (error) {
+          console.error('Supabase error:', error)
+          throw createError({
+            statusCode: 500,
+            statusMessage: 'Failed to fetch employees'
+          })
+        }
+
+        return employees || []
+      } else {
+        // No service filter - return all employees
+        const { data: employees, error } = await supabase
+          .from('employee')
+          .select('*')
+          .order('created_at', { ascending: false })
+
+        if (error) {
+          console.error('Supabase error:', error)
+          throw createError({
+            statusCode: 500,
+            statusMessage: 'Failed to fetch employees'
+          })
+        }
+
+        return employees || []
       }
-
-      return employees || []
     }
   } catch (error) {
     console.error('Employee API error:', error)

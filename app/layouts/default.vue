@@ -17,7 +17,7 @@ const baseLinks = [[{
     open.value = false
   }
 }, {
-  label: 'Stats',
+  label: 'Statistics',
   icon: 'i-lucide-bar-chart-2',
   to: '/stats',
   onSelect: () => {
@@ -70,8 +70,8 @@ const baseLinks = [[{
 const links = computed(() => {
   return baseLinks.map(group =>
     group.filter((link) => {
-      // Filter Stats for admin users only (no access for employees)
-      if (link.label === 'Stats') {
+      // Filter Statistics for admin users only (no access for employees)
+      if (link.label === 'Statistics') {
         return userStore.clientProfile?.role === 'admin'
       }
       // Filter Services and Employees for admin clients only
