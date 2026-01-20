@@ -2,6 +2,24 @@
 import { sub } from 'date-fns'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import type { Period, Range } from '~/types'
+import { useUserStore } from '~/stores/user'
+
+definePageMeta({
+  title: 'Stats'
+})
+
+const userStore = useUserStore()
+
+// Wait for user store to initialize
+await userStore.fetchClientProfile()
+
+// Role-based access control - only admins can access stats
+if (userStore.clientProfile?.role !== 'admin') {
+  throw createError({
+    statusCode: 403,
+    statusMessage: 'Access denied. Admin access required to view statistics.'
+  })
+}
 
 const { isNotificationsSlideoverOpen } = useDashboard()
 

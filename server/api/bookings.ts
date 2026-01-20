@@ -63,11 +63,103 @@ export default eventHandler(async (event) => {
 
     const method = getMethod(event)
 
-    // Allow GET requests without authentication for public booking page
+    // Handle GET requests
     if (method === 'GET') {
       const query = getQuery(event)
 
-      // Build query conditionally
+      // Check if this is an authenticated request
+      let token = null
+      let user = null
+      const authorizationHeader = getHeader(event, 'authorization')
+
+      if (authorizationHeader && authorizationHeader.startsWith('Bearer ')) {
+        token = authorizationHeader.replace('Bearer ', '')
+        const { data: userData, error: userError } = await supabase.auth.getUser(token)
+        if (!userError && userData.user) {
+          user = userData.user
+        }
+      }
+
+      // If authenticated, apply role-based filtering
+      if (user) {
+        // Check if user is admin
+        const { data: clientProfile } = await supabase
+          .from('client_profile')
+          .select('role, id, client_business_id')
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        // Check if user is employee
+        const { data: employee } = await supabase
+          .from('employee')
+          .select('*')
+          .eq('id', user.id)
+          .maybeSingle()
+
+        const isAdmin = clientProfile?.role === 'admin'
+        const isEmployee = !!employee
+
+        if (isEmployee) {
+          // Employees: return only their bookings
+          const { data: bookings, error } = await supabase
+            .from('booking')
+            .select(`
+              *,
+              client_profile(*),
+              employee(*),
+              service(*)
+            `)
+            .eq('employee_id', user.id)
+            .order('booking_date', { ascending: true })
+            .order('start_time', { ascending: true })
+
+          if (error) {
+            throw createError({
+              statusCode: 500,
+              statusMessage: `Failed to fetch bookings: ${error.message}`
+            })
+          }
+
+          return bookings || []
+        }
+
+        if (isAdmin) {
+          // Admins: return bookings filtered by their business context
+          let adminQuery = supabase
+            .from('booking')
+            .select(`
+              *,
+              client_profile(*),
+              employee(*),
+              service(*)
+            `)
+
+          // Filter by client_business_id if available, otherwise by client_profile_id
+          if (clientProfile.client_business_id) {
+            adminQuery = adminQuery.eq('client_business_id', clientProfile.client_business_id)
+          } else {
+            adminQuery = adminQuery.eq('client_profile_id', clientProfile.id)
+          }
+
+          const { data: bookings, error } = await adminQuery
+            .order('booking_date', { ascending: true })
+            .order('start_time', { ascending: true })
+
+          if (error) {
+            throw createError({
+              statusCode: 500,
+              statusMessage: `Failed to fetch bookings: ${error.message}`
+            })
+          }
+
+          return bookings || []
+        }
+
+        // If authenticated but no valid role, return empty
+        return []
+      }
+
+      // For public/unauthenticated requests (like booking pages)
       let queryBuilder = supabase
         .from('booking')
         .select(`
@@ -78,7 +170,7 @@ export default eventHandler(async (event) => {
           service(*)
         `)
 
-      // Only filter by employee_id if it's provided
+      // Only filter by employee_id if it's provided for public queries
       if (query.employee_id) {
         queryBuilder = queryBuilder.eq('employee_id', query.employee_id)
       }
@@ -146,7 +238,7 @@ export default eventHandler(async (event) => {
     // Check if user is admin (client_profile with admin role)
     const { data: clientProfile } = await supabase
       .from('client_profile')
-      .select('role')
+      .select('role, id, client_business_id')
       .eq('user_id', user.id)
       .maybeSingle()
 
@@ -201,28 +293,6 @@ export default eventHandler(async (event) => {
     }
 
     switch (method) {
-      case 'GET':
-        // Admin users: return ALL bookings for all employees and customers with relations
-        const { data: allBookings, error: fetchError } = await supabase
-          .from('booking')
-          .select(`
-            *,
-            client_profile(*),
-            employee(*),
-            service(*)
-          `)
-          .order('booking_date', { ascending: true })
-          .order('start_time', { ascending: true })
-
-        if (fetchError) {
-          throw createError({
-            statusCode: 500,
-            statusMessage: `Failed to fetch bookings: ${fetchError.message}`
-          })
-        }
-
-        return allBookings || []
-
       case 'POST':
         const body = await readBody(event)
         const validatedData = createBookingSchema.parse(body)

@@ -70,6 +70,10 @@ const baseLinks = [[{
 const links = computed(() => {
   return baseLinks.map(group =>
     group.filter((link) => {
+      // Filter Stats for admin users only (no access for employees)
+      if (link.label === 'Stats') {
+        return userStore.clientProfile?.role === 'admin'
+      }
       // Filter Services and Employees for admin clients only
       if (link.label === 'Services' || link.label === 'Employees') {
         const isAdminClient = userStore.clientProfile?.role === 'admin'
