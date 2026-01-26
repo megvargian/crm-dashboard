@@ -110,7 +110,9 @@ const filteredCustomers = computed(() => {
 
   // Apply gender filter
   if (genderFilter.value !== 'all') {
-    filtered = filtered.filter(customer => customer.gender === genderFilter.value)
+    filtered = filtered.filter(customer =>
+      customer.gender?.toLowerCase() === genderFilter.value.toLowerCase()
+    )
   }
 
   return filtered

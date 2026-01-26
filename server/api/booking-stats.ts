@@ -16,11 +16,19 @@ function parseCookies(cookieHeader: string) {
 
 export default eventHandler(async (event) => {
   try {
+    console.log('🔍 Booking stats API called')
     const config = useRuntimeConfig()
     const supabaseUrl = process.env.SUPABASE_URL
     const supabaseServiceKey = config.supabase?.serviceKey || process.env.SUPABASE_SECRET_KEY
 
+    console.log('📊 Environment check:', {
+      hasUrl: !!supabaseUrl,
+      hasServiceKey: !!supabaseServiceKey,
+      serviceKeyPrefix: supabaseServiceKey?.substring(0, 20) + '...'
+    })
+
     if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('❌ Missing Supabase configuration')
       throw createError({
         statusCode: 500,
         statusMessage: 'Supabase configuration missing'
@@ -42,11 +50,16 @@ export default eventHandler(async (event) => {
     let user = null
     const authorizationHeader = getHeader(event, 'authorization')
 
+    console.log('🔐 Auth check:', { hasAuthHeader: !!authorizationHeader })
+
     if (authorizationHeader && authorizationHeader.startsWith('Bearer ')) {
       token = authorizationHeader.replace('Bearer ', '')
       const { data: userData, error: userError } = await supabase.auth.getUser(token)
       if (!userError && userData.user) {
         user = userData.user
+        console.log('✅ User authenticated:', user.id)
+      } else {
+        console.error('❌ User authentication failed:', userError)
       }
     }
 
@@ -58,39 +71,59 @@ export default eventHandler(async (event) => {
     }
 
     // Check if user is admin
-    const { data: clientProfile } = await supabase
+    console.log('🔍 Fetching client profile for user:', user.id)
+    const { data: clientProfile, error: profileError } = await supabase
       .from('client_profile')
       .select('role, id, client_business_id')
       .eq('user_id', user.id)
       .maybeSingle()
 
+    console.log('👤 Client profile:', clientProfile, profileError)
+
+    if (profileError) {
+      console.error('❌ Error fetching client profile:', profileError)
+      throw createError({
+        statusCode: 500,
+        statusMessage: `Failed to fetch client profile: ${profileError.message}`
+      })
+    }
+
     if (clientProfile?.role !== 'admin') {
+      console.error('❌ Access denied - not admin:', clientProfile?.role)
       throw createError({
         statusCode: 403,
         statusMessage: 'Admin access required'
       })
     }
 
-    // Get query parameters for date range
+    // Get query parameters for date range and chart flag
     const query = getQuery(event)
     const startDate = query.start_date as string
     const endDate = query.end_date as string
+    const isChartData = query.chart_data === 'true'
+
+    console.log('📅 Query params:', { startDate, endDate, isChartData })
 
     // Build base query with role-based filtering
+    // Only select fields needed for stats calculations
     let queryBuilder = supabase
       .from('booking')
       .select(`
-        *,
-        service(price, name),
-        client_profile(first_name, last_name),
-        employee(first_name, last_name)
+        id,
+        status,
+        customer_id,
+        service_id,
+        booking_date,
+        service!inner(price)
       `)
 
     // Filter by client_business_id if available, otherwise by client_profile_id
     if (clientProfile.client_business_id) {
       queryBuilder = queryBuilder.eq('client_business_id', clientProfile.client_business_id)
+      console.log('🏢 Filtering by client_business_id:', clientProfile.client_business_id)
     } else {
       queryBuilder = queryBuilder.eq('client_profile_id', clientProfile.id)
+      console.log('👤 Filtering by client_profile_id:', clientProfile.id)
     }
 
     // Apply date range filter if provided
@@ -101,8 +134,16 @@ export default eventHandler(async (event) => {
     }
 
     // Execute query to get all bookings for calculations
+    console.log('🔍 Executing booking query...')
     const { data: bookings, error: bookingsError } = await queryBuilder
+
+    console.log('📊 Query result:', {
+      bookingsCount: bookings?.length || 0,
+      error: bookingsError
+    })
+
     if (bookingsError) {
+      console.error('❌ Bookings query failed:', bookingsError)
       throw createError({
         statusCode: 500,
         statusMessage: `Failed to fetch bookings: ${bookingsError.message}`
@@ -121,7 +162,14 @@ export default eventHandler(async (event) => {
 
       let prevQueryBuilder = supabase
         .from('booking')
-        .select('*, service(price)')
+        .select(`
+          id,
+          status,
+          customer_id,
+          service_id,
+          booking_date,
+          service!inner(price)
+        `)
 
       if (clientProfile.client_business_id) {
         prevQueryBuilder = prevQueryBuilder.eq('client_business_id', clientProfile.client_business_id)
@@ -145,11 +193,13 @@ export default eventHandler(async (event) => {
 
     // Calculate revenue
     const totalRevenue = bookings?.reduce((sum, booking) => {
-      return sum + (booking.service?.price || 0)
+      const price = Number(booking.service?.price || 0)
+      return sum + (isNaN(price) ? 0 : price)
     }, 0) || 0
 
     const prevTotalRevenue = prevBookings.reduce((sum, booking) => {
-      return sum + (booking.service?.price || 0)
+      const price = Number(booking.service?.price || 0)
+      return sum + (isNaN(price) ? 0 : price)
     }, 0)
 
     const revenueVariation = prevTotalRevenue > 0
@@ -174,29 +224,37 @@ export default eventHandler(async (event) => {
       {
         title: 'Total Bookings',
         icon: 'i-lucide-calendar',
-        value: totalBookings,
-        variation: bookingsVariation
+        value: Number(totalBookings),
+        variation: Number(bookingsVariation) || 0
       },
       {
         title: 'Revenue',
         icon: 'i-lucide-circle-dollar-sign',
-        value: totalRevenue,
-        variation: revenueVariation,
+        value: Number(totalRevenue),
+        variation: Number(revenueVariation) || 0,
         formatter: 'currency'
       },
       {
         title: 'Customers',
         icon: 'i-lucide-users',
-        value: uniqueCustomers,
-        variation: customersVariation
+        value: Number(uniqueCustomers),
+        variation: Number(customersVariation) || 0
       },
       {
         title: 'Completed',
         icon: 'i-lucide-check-circle',
-        value: completedBookings,
-        variation: completedVariation
+        value: Number(completedBookings),
+        variation: Number(completedVariation) || 0
       }
     ]
+
+    console.log('📈 Final stats:', stats)
+
+    // If chart data is requested, return the bookings data instead
+    if (isChartData) {
+      console.log('📊 Returning chart data instead of stats')
+      return bookings || []
+    }
 
     return stats
   } catch (error: unknown) {

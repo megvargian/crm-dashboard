@@ -16,18 +16,24 @@ function formatCurrency(value: number): string {
   })
 }
 
-const { data: stats } = await useAsyncData<Stat[]>('booking-stats', async () => {
+const { data: stats, error, pending } = await useAsyncData<Stat[]>('booking-stats', async () => {
   try {
+    console.log('📊 Fetching booking stats...')
+
     // Get authentication session
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
-      console.error('No active session for stats')
-      return []
+      console.error('❌ No active session for stats')
+      throw new Error('Authentication required')
     }
+
+    console.log('✅ Session found, making API request')
 
     // Format dates for API
     const startDate = props.range.start.toISOString().split('T')[0]
     const endDate = props.range.end.toISOString().split('T')[0]
+
+    console.log('📅 Date range:', { startDate, endDate })
 
     // Fetch booking statistics
     const response = await $fetch<any[]>('/api/booking-stats', {
@@ -40,15 +46,26 @@ const { data: stats } = await useAsyncData<Stat[]>('booking-stats', async () => 
       }
     })
 
+    console.log('📈 Raw API response:', response)
+
+    if (!response || !Array.isArray(response)) {
+      console.error('❌ Invalid response format:', response)
+      return []
+    }
+
     // Format the response data
-    return response.map((stat) => ({
+    const formattedStats = response.map((stat) => ({
       title: stat.title,
       icon: stat.icon,
-      value: stat.formatter === 'currency' ? formatCurrency(stat.value) : stat.value,
+      value: stat.formatter === 'currency' ? formatCurrency(Number(stat.value)) : stat.value,
       variation: stat.variation
     }))
+
+    console.log('✅ Formatted stats:', formattedStats)
+    return formattedStats
   } catch (error) {
-    console.error('Error fetching booking stats:', error)
+    console.error('❌ Error fetching booking stats:', error)
+    // Return empty array instead of throwing to prevent component failure
     return []
   }
 }, {
@@ -58,7 +75,32 @@ const { data: stats } = await useAsyncData<Stat[]>('booking-stats', async () => 
 </script>
 
 <template>
-  <UPageGrid class="lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-px">
+  <div v-if="pending" class="flex justify-center items-center p-8">
+    <UIcon name="i-lucide-loader-2" class="animate-spin size-6" />
+    <span class="ml-2">Loading stats...</span>
+  </div>
+
+  <div v-else-if="error" class="flex justify-center items-center p-8">
+    <UAlert
+      icon="i-lucide-alert-circle"
+      color="error"
+      variant="subtle"
+      title="Error loading stats"
+      :description="error?.message || 'Failed to load booking statistics'"
+    />
+  </div>
+
+  <div v-else-if="!stats || stats.length === 0" class="flex justify-center items-center p-8">
+    <UAlert
+      icon="i-lucide-info"
+      color="blue"
+      variant="subtle"
+      title="No data available"
+      description="No booking statistics found for the selected date range."
+    />
+  </div>
+
+  <UPageGrid v-else class="lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-px">
     <UPageCard
       v-for="(stat, index) in stats"
       :key="index"
