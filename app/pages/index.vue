@@ -210,6 +210,58 @@ const currentWeekDays = computed(() => {
   return days
 })
 
+// Month view utilities
+const currentMonthStart = computed(() => {
+  const date = new Date(currentDate.value)
+  date.setDate(1)
+  date.setHours(0, 0, 0, 0)
+  return date
+})
+
+const currentMonthDays = computed(() => {
+  const monthStart = currentMonthStart.value
+  const firstDayOfWeek = monthStart.getDay() // 0 = Sunday
+  const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate()
+  
+  const days = []
+  
+  // Add padding days from previous month
+  for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+    const date = new Date(monthStart)
+    date.setDate(date.getDate() - (i + 1))
+    days.push({ date, isCurrentMonth: false })
+  }
+  
+  // Add days of current month
+  for (let day = 1; day <= daysInMonth; day++) {
+    const date = new Date(monthStart)
+    date.setDate(day)
+    days.push({ date, isCurrentMonth: true })
+  }
+  
+  // Add padding days from next month to complete the grid (42 cells = 6 weeks)
+  const remainingCells = 42 - days.length
+  for (let day = 1; day <= remainingCells; day++) {
+    const date = new Date(monthStart)
+    date.setMonth(date.getMonth() + 1)
+    date.setDate(day)
+    days.push({ date, isCurrentMonth: false })
+  }
+  
+  return days
+})
+
+// Get bookings for a specific date
+const getBookingsForDate = (date: Date) => {
+  const dateStr = formatDate(date)
+  return bookings.value?.filter(booking => {
+    const bookingDate = booking.booking_date.includes('T') 
+      ? booking.booking_date.split('T')[0] 
+      : booking.booking_date
+    return bookingDate === dateStr
+  }) || []
+}
+
 // Debug current bookings - moved here after currentWeekDays is defined
 watchEffect(() => {
   if (bookings.value?.length > 0) {
@@ -460,6 +512,37 @@ const handleTimeSlotClick = (date: Date, time: string) => {
   }
 }
 
+const handleMonthDayClick = (date: Date) => {
+  const dayBookings = getBookingsForDate(date)
+  
+  if (dayBookings.length === 1) {
+    // If only one booking, edit it directly
+    editBooking(dayBookings[0])
+  } else if (dayBookings.length > 1) {
+    // If multiple bookings, you could show a list or edit the first one
+    // For now, let's edit the first booking
+    editBooking(dayBookings[0])
+  } else {
+    // No bookings, create a new one with 9:00 AM default time
+    editingBooking.value = null
+    selectedDate.value = date
+    selectedTimeSlot.value = '09:00'
+
+    newBooking.value = {
+      customer_id: '',
+      client_profile_id: '',
+      client_business_id: undefined,
+      employee_id: '',
+      service_id: '',
+      booking_date: formatDate(date),
+      start_time: '09:00',
+      notes: ''
+    }
+
+    showCreateModal.value = true
+  }
+}
+
 const editBooking = (booking: Booking) => {
   editingBooking.value = booking
 
@@ -494,6 +577,20 @@ const navigateWeek = (direction: 'prev' | 'next') => {
   const newDate = new Date(currentDate.value)
   newDate.setDate(newDate.getDate() + (direction === 'next' ? 7 : -7))
   currentDate.value = newDate
+}
+
+const navigateMonth = (direction: 'prev' | 'next') => {
+  const newDate = new Date(currentDate.value)
+  newDate.setMonth(newDate.getMonth() + (direction === 'next' ? 1 : -1))
+  currentDate.value = newDate
+}
+
+const navigate = (direction: 'prev' | 'next') => {
+  if (viewMode.value === 'week') {
+    navigateWeek(direction)
+  } else {
+    navigateMonth(direction)
+  }
 }
 
 const goToToday = () => {
@@ -702,14 +799,22 @@ const forceRefreshCalendar = async () => {
             </UButton>
 
             <div class="flex items-center gap-2">
-              <UButton variant="ghost" icon="i-lucide-chevron-left" @click="navigateWeek('prev')" />
+              <UButton variant="ghost" icon="i-lucide-chevron-left" @click="navigate('prev')" />
               <span class="text-lg font-medium min-w-48 text-center">
-                {{ currentWeekStart.toLocaleDateString('en-US', {
-                  month: 'long',
-                  year: 'numeric'
-                }) }}
+                <template v-if="viewMode === 'week'">
+                  {{ currentWeekStart.toLocaleDateString('en-US', {
+                    month: 'long',
+                    year: 'numeric'
+                  }) }}
+                </template>
+                <template v-else>
+                  {{ currentMonthStart.toLocaleDateString('en-US', {
+                    month: 'long',
+                    year: 'numeric'
+                  }) }}
+                </template>
               </span>
-              <UButton variant="ghost" icon="i-lucide-chevron-right" @click="navigateWeek('next')" />
+              <UButton variant="ghost" icon="i-lucide-chevron-right" @click="navigate('next')" />
             </div>
 
             <div class="flex items-center rounded-lg border border-gray-600 overflow-hidden">
@@ -736,8 +841,8 @@ const forceRefreshCalendar = async () => {
     </template>
 
     <template #body>
-      <!-- Calendar Grid -->
-      <div class="h-full flex flex-col bg-gray-900">
+      <!-- Week View - Calendar Grid -->
+      <div v-if="viewMode === 'week'" class="h-full flex flex-col bg-gray-900">
         <!-- Week Days Header -->
         <div class="grid grid-cols-8 border-b border-gray-700 bg-gray-800">
           <div class="p-3 text-sm font-medium text-gray-300 text-center border-r border-gray-700">
@@ -866,6 +971,76 @@ const forceRefreshCalendar = async () => {
                   <div class="text-blue-300 text-xs font-medium">
                     Selected
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Month View - Traditional Calendar -->
+      <div v-else class="h-full flex flex-col bg-gray-900">
+        <!-- Month Days Header -->
+        <div class="grid grid-cols-7 border-b border-gray-700 bg-gray-800">
+          <div
+            v-for="day in weekDays"
+            :key="day"
+            class="p-4 text-center text-sm font-medium text-gray-300 border-r border-gray-700 last:border-r-0"
+          >
+            {{ day }}
+          </div>
+        </div>
+
+        <!-- Month Calendar Grid -->
+        <div class="flex-1">
+          <div class="grid grid-cols-7 gap-0 h-full">
+            <div
+              v-for="(dayInfo, index) in currentMonthDays"
+              :key="index"
+              class="border-r border-gray-700 border-b border-gray-700 min-h-24 p-2 cursor-pointer transition-all duration-200 relative flex flex-col"
+              :class="{
+                'bg-gray-800/50': !dayInfo.isCurrentMonth,
+                'bg-gray-900': dayInfo.isCurrentMonth,
+                'bg-blue-900/30': isToday(dayInfo.date),
+                'hover:bg-gray-800/30': true
+              }"
+              @click="handleMonthDayClick(dayInfo.date)"
+            >
+              <!-- Date Number -->
+              <div class="mb-2 text-right">
+                <span
+                  class="text-sm font-medium"
+                  :class="{
+                    'text-gray-500': !dayInfo.isCurrentMonth,
+                    'text-white': dayInfo.isCurrentMonth && !isToday(dayInfo.date),
+                    'text-blue-400 font-bold': isToday(dayInfo.date)
+                  }"
+                >
+                  {{ dayInfo.date.getDate() }}
+                </span>
+              </div>
+
+              <!-- Booking Indicators -->
+              <div class="flex-1 space-y-1">
+                <div
+                  v-for="(booking, bookingIndex) in getBookingsForDate(dayInfo.date).slice(0, 3)"
+                  :key="booking.id"
+                  class="w-full rounded px-2 py-1 text-xs cursor-pointer transition-all duration-200 truncate"
+                  :class="getBookingColor(booking)"
+                  @click.stop="editBooking(booking)"
+                >
+                  <div class="font-medium truncate">
+                    {{ extractTimeFromTimestamp(booking.start_time) }}
+                    {{ booking.client_profile?.first_name || booking.customer?.full_name || 'Customer' }}
+                  </div>
+                </div>
+                
+                <!-- More bookings indicator -->
+                <div
+                  v-if="getBookingsForDate(dayInfo.date).length > 3"
+                  class="text-xs text-gray-400 px-2"
+                >
+                  +{{ getBookingsForDate(dayInfo.date).length - 3 }} more
                 </div>
               </div>
             </div>
