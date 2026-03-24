@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { z } from 'zod'
+import { sendBookingConfirmationToCustomer, sendBookingNotificationToAdmin } from '../utils/email'
 
 // Schema for booking creation from public booking page
 const createBookingSchema = z.object({
@@ -52,10 +53,10 @@ export default defineEventHandler(async (event) => {
   const { customer_id, client_profile_id, employee_id, service_id, booking_date, start_time, notes } = validation.data
 
   try {
-    // Get client_business_id from client_profile
+    // Get client_business_id and admin email from client_profile
     const { data: clientProfile, error: clientProfileError } = await supabase
       .from('client_profile')
-      .select('client_business_id')
+      .select('client_business_id, email, first_name, last_name')
       .eq('id', client_profile_id)
       .single()
 
@@ -154,6 +155,20 @@ export default defineEventHandler(async (event) => {
       throw createError({
         statusCode: 500,
         statusMessage: `Failed to create booking: ${bookingError.message}`
+      })
+    }
+
+    // Send email notifications (fire-and-forget — don't fail booking if email fails)
+    const emailPromises = []
+    if (booking.customer?.email) {
+      emailPromises.push(sendBookingConfirmationToCustomer(booking))
+    }
+    if (clientProfile.email) {
+      emailPromises.push(sendBookingNotificationToAdmin(booking, clientProfile.email))
+    }
+    if (emailPromises.length > 0) {
+      Promise.allSettled(emailPromises).catch((err) => {
+        console.error('Email sending error:', err)
       })
     }
 

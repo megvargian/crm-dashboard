@@ -21,6 +21,7 @@ export default defineNuxtConfig({
     supabase: {
       serviceKey: process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
     },
+    postmarkApiKey: process.env.POSTMARK_API_KEY,
     // Public environment variables (exposed to client)
     public: {
       supabaseUrl: process.env.SUPABASE_URL,
