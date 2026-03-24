@@ -224,4 +224,3 @@ export async function sendBookingNotificationToAdmin(booking: any, adminEmail: s
     throw err
   }
 }
-}
